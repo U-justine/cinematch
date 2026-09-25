@@ -5,6 +5,7 @@ Pages: Home, Browse, Search, Watchlist.
 """
 
 import ast
+import html
 import datetime
 import random
 import requests
@@ -19,17 +20,26 @@ from sklearn.metrics.pairwise import cosine_similarity
 # ============================================================
 st.set_page_config(
     page_title="CineMatch — Your Next Favorite Film",
-    page_icon="🎬",
+    page_icon=":movie_camera:",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 
 # ============================================================
+# QUERY PARAM ROUTER (for HTML nav)
+# ============================================================
+qp = st.query_params
+if "page" in qp:
+    st.session_state.page = qp["page"]
+elif "page" not in st.session_state:
+    st.session_state.page = "home"
+
+
+# ============================================================
 # SESSION STATE
 # ============================================================
 for key, default in {
-    "page": "home",
     "watchlist": [],
     "history": [],
     "genre_filter": [],
@@ -40,9 +50,21 @@ for key, default in {
         st.session_state[key] = default
 
 
+# Handle genre reset from URL
+if st.query_params.get("g") == "none":
+    st.session_state.selected_genre = None
+if "genre" in st.query_params and st.query_params["genre"]:
+    st.session_state.selected_genre = st.query_params["genre"]
+
+
 # ============================================================
-# ICON HELPERS — Material Icons Round
+# HELPERS
 # ============================================================
+def esc(text) -> str:
+    """Escape HTML characters so text renders safely."""
+    return html.escape(str(text))
+
+
 def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
     return (
         f'<span class="material-icons-round" '
@@ -62,15 +84,27 @@ def icon_badge(name: str, size: int = 34, icon_size: int = 18,
     )
 
 
+def make_poster_placeholder(title: str, height: str = "100%", width: str = "100%") -> str:
+    short = esc((title[:22] + "…") if len(title) > 22 else title)
+    return (
+        f'<div style="width:{width};height:{height};min-width:140px;min-height:180px;'
+        f'background:linear-gradient(135deg,#E50914,#7a0009);'
+        f'display:flex;flex-direction:column;align-items:center;'
+        f'justify-content:center;color:white;text-align:center;padding:12px;'
+        f'border-radius:8px;flex-shrink:0;">'
+        f'<span class="material-icons-round" style="font-size:36px;opacity:0.9;">movie</span>'
+        f'<span style="margin-top:8px;font-size:12px;font-weight:700;line-height:1.2;">{short}</span>'
+        f'</div>'
+    )
+
+
 # ============================================================
-# NETFLIX-STYLE CSS — icons via @import (fixes missing icons)
+# NETFLIX-STYLE CSS — icons via <link> for reliability
 # ============================================================
 NETFLIX_CSS = """
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 <style>
-@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Round');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
-/* Force Material Icons to load correctly */
 .material-icons-round {
     font-family: 'Material Icons Round' !important;
     font-weight: normal !important;
@@ -94,9 +128,8 @@ NETFLIX_CSS = """
     --netflix-black: #141414;
     --netflix-dark: #181818;
     --netflix-card: #1f1f1f;
-    --netflix-gray: #564d4d;
-    --netflix-white: #FFFFFF;
     --netflix-muted: #B3B3B3;
+    --netflix-white: #FFFFFF;
 }
 
 .stApp {
@@ -114,14 +147,13 @@ NETFLIX_CSS = """
 #MainMenu, footer, header {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 
-/* ---------- HEADER — NETFLIX PROPORTIONS ---------- */
+/* ---------- HEADER ---------- */
 .cinematch-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 12px;
-    margin-bottom: 6px;
-    border-bottom: 1px solid #1f1f1f;
+    padding: 16px 12px 8px 12px;
+    margin-bottom: 0;
 }
 
 .cinematch-logo-row {
@@ -151,44 +183,68 @@ NETFLIX_CSS = """
     display: flex;
     align-items: center;
     gap: 20px;
-    color: #e5e5e5;
 }
 
-/* ---------- NAV BUTTONS ---------- */
-.stButton > button {
-    background-color: transparent !important;
-    color: #e5e5e5 !important;
-    border: none !important;
-    border-radius: 0 !important;
-    padding: 12px 16px !important;
-    font-size: 15px !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.3px !important;
-    transition: all 0.2s ease !important;
-    width: 100%;
+/* ---------- NAV BAR (inline links with icons) ---------- */
+.nav-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px 0 12px;
+    border-bottom: 1px solid #1f1f1f;
+    margin-bottom: 24px;
+    overflow-x: auto;
+    scrollbar-width: none;
 }
+.nav-bar::-webkit-scrollbar { display: none; }
 
-.stButton > button:hover {
-    color: white !important;
-    background-color: rgba(255,255,255,0.06) !important;
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px 16px 16px;
+    color: #b3b3b3 !important;
+    text-decoration: none !important;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    position: relative;
+    white-space: nowrap;
+    transition: color 0.2s ease;
 }
-
-div[data-testid="stHorizontalBlock"] button[kind="primary"] {
-    background-color: transparent !important;
-    color: white !important;
-    font-weight: 700 !important;
-    border-bottom: 2px solid var(--netflix-red) !important;
-    border-radius: 0 !important;
+.nav-link:hover {
+    color: #ffffff !important;
+}
+.nav-link.active {
+    color: #ffffff !important;
+    font-weight: 700;
+}
+.nav-link.active::after {
+    content: '';
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 0;
+    height: 2px;
+    background: var(--netflix-red);
+    border-radius: 2px;
+}
+.nav-link .material-icons-round {
+    font-size: 20px !important;
+    color: #b3b3b3;
+    transition: color 0.2s ease;
+}
+.nav-link:hover .material-icons-round,
+.nav-link.active .material-icons-round {
+    color: var(--netflix-red) !important;
 }
 
 /* ---------- HERO ---------- */
 .hero-banner {
-    position: relative;
     background: linear-gradient(135deg, #1a0505 0%, #2d0a0a 40%, #141414 100%);
     border-radius: 12px;
     padding: 48px 40px;
     margin-bottom: 32px;
-    overflow: hidden;
     min-height: 220px;
     display: flex;
     flex-direction: column;
@@ -380,6 +436,24 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
     color: white !important;
 }
 
+/* ---------- PRIMARY/ACTION BUTTONS ---------- */
+.stButton > button {
+    background-color: var(--netflix-red) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 6px !important;
+    padding: 10px 18px !important;
+    font-weight: 700 !important;
+    font-size: 13.5px !important;
+    letter-spacing: 0.4px !important;
+    transition: all 0.2s ease !important;
+    width: 100%;
+}
+.stButton > button:hover {
+    background-color: var(--netflix-red-hover) !important;
+    box-shadow: 0 6px 20px rgba(229,9,20,0.5) !important;
+}
+
 /* ---------- FOOTER ---------- */
 .footer { text-align: center; padding: 40px 0 20px; color: #555; font-size: 12px; }
 
@@ -389,6 +463,8 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
     .cinematch-logo-icon { font-size: 26px !important; }
     .hero-title { font-size: 30px; }
     .section-title { font-size: 19px; }
+    .nav-link { font-size: 13px; padding: 12px 12px 14px 12px; }
+    .nav-link .material-icons-round { font-size: 18px !important; }
 }
 
 @media (max-width: 768px) {
@@ -402,38 +478,21 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
     .motd-poster { width: 100% !important; max-width: 280px !important; height: auto !important; }
     .shelf-card { flex: 0 0 130px; }
     .header-icons { gap: 12px; }
+    .nav-link { font-size: 12px; padding: 10px 10px 12px 10px; gap: 5px; }
+    .nav-link .material-icons-round { font-size: 16px !important; }
 }
 
 @media (max-width: 480px) {
-    .cinematch-logo { font-size: 18px; }
+    .cinematch-logo { font-size: 18px; letter-spacing: -0.8px; }
     .cinematch-logo-icon { font-size: 18px !important; }
-    .stButton > button {
-        padding: 6px 8px !important;
-        font-size: 11px !important;
-    }
+    .nav-link { font-size: 11px; padding: 8px 8px 10px 8px; gap: 4px; }
+    .nav-link .material-icons-round { font-size: 14px !important; }
     .header-icons { gap: 8px; }
 }
 </style>
 """
 
 st.markdown(NETFLIX_CSS, unsafe_allow_html=True)
-
-
-# ============================================================
-# HELPERS
-# ============================================================
-def make_poster_placeholder(title: str, height: str = "100%", width: str = "100%") -> str:
-    short = (title[:22] + "…") if len(title) > 22 else title
-    return (
-        f'<div style="width:{width};height:{height};min-width:140px;min-height:180px;'
-        f'background:linear-gradient(135deg,#E50914,#7a0009);'
-        f'display:flex;flex-direction:column;align-items:center;'
-        f'justify-content:center;color:white;text-align:center;padding:12px;'
-        f'border-radius:8px;flex-shrink:0;">'
-        f'<span class="material-icons-round" style="font-size:36px;opacity:0.9;">movie</span>'
-        f'<span style="margin-top:8px;font-size:12px;font-weight:700;line-height:1.2;">{short}</span>'
-        f'</div>'
-    )
 
 
 # ============================================================
@@ -679,7 +738,7 @@ def is_in_watchlist(movie_id):
 
 
 # ============================================================
-# HEADER + TOP NAV
+# HEADER + NAV
 # ============================================================
 st.markdown(
     f"""
@@ -698,30 +757,32 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-nav1, nav2, nav3, nav4 = st.columns(4)
-with nav1:
-    if st.button("HOME", use_container_width=True, key="nav_home",
-                 type="primary" if st.session_state.page == "home" else "secondary"):
-        st.session_state.page = "home"
-        st.session_state.selected_genre = None
-        st.rerun()
-with nav2:
-    if st.button("BROWSE", use_container_width=True, key="nav_browse",
-                 type="primary" if st.session_state.page == "browse" else "secondary"):
-        st.session_state.page = "browse"
-        st.session_state.selected_genre = None
-        st.rerun()
-with nav3:
-    if st.button("SEARCH", use_container_width=True, key="nav_search",
-                 type="primary" if st.session_state.page == "search" else "secondary"):
-        st.session_state.page = "search"
-        st.rerun()
-with nav4:
-    wl_count = len(st.session_state.watchlist)
-    if st.button(f"MY LIST ({wl_count})", use_container_width=True, key="nav_watch",
-                 type="primary" if st.session_state.page == "watchlist" else "secondary"):
-        st.session_state.page = "watchlist"
-        st.rerun()
+# Inline nav with icons + active underline
+current_page = st.session_state.page
+wl_count = len(st.session_state.watchlist)
+
+
+def nav_item(page: str, icon_name: str, label: str) -> str:
+    active = "active" if current_page == page else ""
+    return (
+        f'<a class="nav-link {active}" href="?page={page}" target="_self">'
+        f'<span class="material-icons-round">{icon_name}</span>'
+        f'<span>{label}</span>'
+        f'</a>'
+    )
+
+
+st.markdown(
+    f"""
+    <div class="nav-bar">
+        {nav_item('home', 'home', 'HOME')}
+        {nav_item('browse', 'grid_view', 'BROWSE')}
+        {nav_item('search', 'search', 'SEARCH')}
+        {nav_item('watchlist', 'favorite', f'MY LIST ({wl_count})')}
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
@@ -734,16 +795,17 @@ df, sim = build_engine()
 # RENDER HELPERS
 # ============================================================
 def render_shelf_card(title, poster, rating, year=None):
+    safe_title = esc(title)
     poster_html = (
-        f'<img class="shelf-poster" src="{poster}" alt="{title}">'
-        if poster else make_poster_placeholder(title)
+        f'<img class="shelf-poster" src="{poster}" alt="{safe_title}">'
+        if poster else make_poster_placeholder(safe_title)
     )
-    year_txt = f" · {year}" if year else ""
+    year_txt = f" · {esc(year)}" if year else ""
     return f"""
     <div class="shelf-card">
         {poster_html}
         <div class="shelf-info">
-            <div class="shelf-title">{title}</div>
+            <div class="shelf-title">{safe_title}</div>
             <div class="shelf-meta">{icon('star', 13, '#f5c518')} {rating:.1f}{year_txt}</div>
         </div>
     </div>
@@ -755,7 +817,8 @@ def render_movie_result_card(row, show_similarity=True):
     rating = row.get("vote_average") or 0
     sim_val = row.get("similarity")
     year = str(row.get("release_date") or "")[:4]
-    overview = str(row.get("overview", ""))[:150] + "…"
+    overview = esc(str(row.get("overview", ""))[:150]) + "…"
+    safe_title = esc(row["title"])
 
     poster = None
     if TMDB_API_KEY:
@@ -763,8 +826,8 @@ def render_movie_result_card(row, show_similarity=True):
         poster = poster or fetch_poster_by_title(row["title"])
 
     poster_html = (
-        f'<img class="result-poster" src="{poster}" alt="{row["title"]}">'
-        if poster else make_poster_placeholder(row["title"], "180px")
+        f'<img class="result-poster" src="{poster}" alt="{safe_title}">'
+        if poster else make_poster_placeholder(safe_title, "180px")
     )
 
     match_html = ""
@@ -777,8 +840,8 @@ def render_movie_result_card(row, show_similarity=True):
         <div class="result-card">
             <div class="result-poster-wrap">{poster_html}</div>
             <div class="result-body">
-                <div class="result-title">{row['title']}</div>
-                <div class="result-year">{year}</div>
+                <div class="result-title">{safe_title}</div>
+                <div class="result-year">{esc(year)}</div>
                 <div class="result-meta">
                     <span class="rating">{icon('star', 13, '#f5c518')} {rating:.1f}</span>
                     {match_html}
@@ -793,7 +856,7 @@ def render_movie_result_card(row, show_similarity=True):
     if movie_id is not None:
         in_wl = is_in_watchlist(movie_id)
         label = "Remove from list" if in_wl else "Add to Watchlist"
-        if st.button(label, key=f"wl_{movie_id}_{row['title'][:20]}", use_container_width=True):
+        if st.button(label, key=f"wl_{movie_id}_{safe_title[:20]}", use_container_width=True):
             if in_wl:
                 remove_from_watchlist(movie_id)
             else:
@@ -832,7 +895,7 @@ def render_home():
             poster = poster or fetch_poster_by_title(motd["title"])
         poster_html = (
             f'<img class="motd-poster" src="{poster}" alt="poster">'
-            if poster else make_poster_placeholder(motd["title"], "210px", "140px")
+            if poster else make_poster_placeholder(esc(motd["title"]), "210px", "140px")
         )
         rating = motd.get("vote_average", 0)
         st.markdown(
@@ -841,11 +904,11 @@ def render_home():
                 {poster_html}
                 <div style="flex:1;min-width:0;">
                     <div class="motd-label">{icon('auto_awesome', 14)} Picked for Today</div>
-                    <div class="motd-title">{motd['title']}</div>
+                    <div class="motd-title">{esc(motd['title'])}</div>
                     <div class="result-meta" style="margin-bottom:12px;">
                         <span class="rating">{icon('star', 15, '#f5c518')} {rating:.1f}/10</span>
                     </div>
-                    <div class="motd-overview">{str(motd['overview'])[:380]}…</div>
+                    <div class="motd-overview">{esc(str(motd['overview'])[:380])}…</div>
                 </div>
             </div>
             """,
@@ -868,9 +931,13 @@ def render_home():
             st.info("Trending unavailable right now.")
 
     st.markdown(f'<div class="section-title">{icon("explore", 22)} Or Explore by Genre</div>', unsafe_allow_html=True)
-    if st.button("BROWSE ALL GENRES →", use_container_width=True, key="home_browse", type="primary"):
-        st.session_state.page = "browse"
-        st.rerun()
+    st.markdown(
+        '<a href="?page=browse" target="_self" style="display:inline-block;'
+        'background:#E50914;color:#fff;padding:12px 26px;border-radius:6px;'
+        'text-decoration:none;font-weight:700;font-size:14px;letter-spacing:0.4px;">'
+        'BROWSE ALL GENRES →</a>',
+        unsafe_allow_html=True,
+    )
 
 
 # ============================================================
@@ -879,21 +946,25 @@ def render_home():
 def render_browse():
     if st.session_state.selected_genre:
         genre = st.session_state.selected_genre
-        if st.button("← Back to all genres", key="back_genres"):
-            st.session_state.selected_genre = None
-            st.rerun()
+        st.markdown(
+            '<a href="?page=browse&g=none" target="_self" style="display:inline-block;'
+            'background:#E50914;color:#fff;padding:8px 16px;border-radius:6px;'
+            'text-decoration:none;font-weight:700;font-size:13px;">← BACK TO ALL GENRES</a>',
+            unsafe_allow_html=True,
+        )
 
         label = GENRE_LABELS.get(genre, genre)
         st.markdown(
-            f'<div class="section-title">{icon(GENRE_ICONS.get(genre, "movie"), 22)} {label}</div>',
+            f'<div class="section-title" style="margin-top:16px;">'
+            f'{icon(GENRE_ICONS.get(genre, "movie"), 22)} {esc(label)}</div>',
             unsafe_allow_html=True,
         )
 
         movies = get_genre_movies(df, genre, n=18)
         if movies.empty:
-            st.info(f"No movies found in {label}.")
+            st.info(f"No movies found in {esc(label)}.")
         else:
-            st.caption(f"Top {len(movies)} highest-rated films in {label}")
+            st.caption(f"Top {len(movies)} highest-rated films in {esc(label)}")
             cols = st.columns(4)
             for i, (_, row) in enumerate(movies.iterrows()):
                 with cols[i % 4]:
@@ -935,7 +1006,7 @@ def render_browse():
                         <div class="genre-card-scrim">
                             <div class="genre-icon-badge">{icon_badge(icon_name)}</div>
                             <div>
-                                <div class="genre-name">{label}</div>
+                                <div class="genre-name">{esc(label)}</div>
                                 <div class="genre-count"><span class="dot"></span>{count:,} movies</div>
                             </div>
                         </div>
@@ -943,7 +1014,7 @@ def render_browse():
                     """,
                     unsafe_allow_html=True,
                 )
-                if st.button(f"Open {label}", key=f"genre_{genre}", use_container_width=True):
+                if st.button(f"Open {esc(label)}", key=f"genre_{genre}", use_container_width=True):
                     st.session_state.selected_genre = genre
                     st.rerun()
 
@@ -955,7 +1026,7 @@ def render_search():
     st.markdown(f'<div class="section-title">{icon("search", 22)} Search Movies</div>', unsafe_allow_html=True)
 
     if st.session_state.history:
-        hist = "  ·  ".join(st.session_state.history)
+        hist = "  ·  ".join(esc(h) for h in st.session_state.history)
         st.markdown(
             f'<div style="color:#888;font-size:13px;margin-bottom:12px;">'
             f'{icon("history", 15, "#888")} Recent: {hist}</div>',
@@ -985,9 +1056,10 @@ def render_search():
     if query and len(query) > 1:
         suggestions = search_titles(df, query)
         if suggestions:
+            sugg = "  ·  ".join(esc(s) for s in suggestions)
             st.markdown(
                 f'<div style="color:#888;font-size:13px;margin-top:-4px;">'
-                f'{icon("lightbulb", 14, "#888")} Suggestions: {"  ·  ".join(suggestions)}</div>',
+                f'{icon("lightbulb", 14, "#888")} Suggestions: {sugg}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -1005,11 +1077,11 @@ def render_search():
                 results = recommend(df, sim, query, n=n_results, genre_filter=selected_genres)
 
             if results.empty:
-                st.error(f'No movies found matching "{query}". Try another title.')
+                st.error(f'No movies found matching "{esc(query)}". Try another title.')
             else:
                 st.markdown(
                     f'<div class="section-title">{icon("auto_awesome", 22)} '
-                    f'Because you liked <span style="color:var(--netflix-red);margin-left:4px;">"{query.title()}"</span></div>',
+                    f'Because you liked <span style="color:var(--netflix-red);margin-left:4px;">"{esc(query.title())}"</span></div>',
                     unsafe_allow_html=True,
                 )
                 cols = st.columns(4)
@@ -1045,20 +1117,21 @@ def render_watchlist():
     for i, m in enumerate(st.session_state.watchlist):
         with cols[i % 5]:
             poster = m.get("poster")
+            safe_title = esc(m["title"])
             poster_html = (
-                f'<img class="watch-poster" src="{poster}" alt="{m["title"]}">'
-                if poster else make_poster_placeholder(m["title"])
+                f'<img class="watch-poster" src="{poster}" alt="{safe_title}">'
+                if poster else make_poster_placeholder(safe_title)
             )
-            year_txt = f" · {m.get('year')}" if m.get("year") else ""
+            year_txt = f" · {esc(m.get('year'))}" if m.get("year") else ""
             st.markdown(
                 f"""
                 <div class="watch-card">
                     <div class="watch-poster-wrap">
                         {poster_html}
-                        <div class="watch-rating-badge">{icon('star', 12, '#f5c518')} {m.get('rating') or 'N/A'}</div>
+                        <div class="watch-rating-badge">{icon('star', 12, '#f5c518')} {esc(m.get('rating') or 'N/A')}</div>
                     </div>
                     <div class="watch-info">
-                        <div class="watch-title">{m['title']}</div>
+                        <div class="watch-title">{safe_title}</div>
                         <div class="watch-year">{year_txt.strip(' ·')}</div>
                     </div>
                 </div>
