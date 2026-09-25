@@ -62,7 +62,6 @@ NETFLIX_CSS = """
     color: var(--netflix-red);
 }
 
-/* ---------- Header ---------- */
 .cinematch-header {
     display: flex;
     align-items: center;
@@ -109,7 +108,6 @@ NETFLIX_CSS = """
     flex-wrap: wrap;
 }
 
-/* ---------- Hero ---------- */
 .hero-banner {
     background: linear-gradient(135deg, #E50914 0%, #7a0009 100%);
     padding: 45px 28px;
@@ -137,7 +135,6 @@ NETFLIX_CSS = """
     line-height: 1.5;
 }
 
-/* ---------- Inputs ---------- */
 .stTextInput > div > div > input {
     background-color: rgba(0,0,0,0.75);
     border: 1px solid var(--netflix-gray);
@@ -164,7 +161,6 @@ NETFLIX_CSS = """
     color: var(--netflix-white) !important;
 }
 
-/* ---------- Button ---------- */
 .stButton > button {
     background-color: var(--netflix-red);
     color: var(--netflix-white);
@@ -184,7 +180,6 @@ NETFLIX_CSS = """
     box-shadow: 0 6px 20px rgba(229,9,20,0.55);
 }
 
-/* ---------- Movie Cards ---------- */
 .movie-card {
     background: linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%);
     border-radius: 8px;
@@ -254,7 +249,6 @@ NETFLIX_CSS = """
     word-break: break-word;
 }
 
-/* ---------- Section Title ---------- */
 .section-title {
     color: var(--netflix-white);
     font-size: 22px;
@@ -268,7 +262,6 @@ NETFLIX_CSS = """
     line-height: 1.3;
 }
 
-/* ---------- Trending Grid ---------- */
 .trend-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -318,7 +311,6 @@ NETFLIX_CSS = """
     gap: 6px;
 }
 
-/* ---------- Footer ---------- */
 .footer {
     text-align: center;
     padding: 40px 0 20px 0;
@@ -333,23 +325,16 @@ NETFLIX_CSS = """
     vertical-align: middle;
 }
 
-/* ============================================================
-   RESPONSIVE — TABLET (<= 992px)
-   ============================================================ */
 @media (max-width: 992px) {
     .cinematch-logo { font-size: 26px; }
     .cinematch-tagline { font-size: 10px; }
     .hero-title { font-size: 30px; }
     .hero-subtitle { font-size: 14px; }
-    .(rowmovie-poster { width: 90px.get; min-width: 90px; height:(" 135px; }
-    .movie-titleid { font-size: 18px; }
-"))
-    .trend-grid { grid-template-column                   s: repeat(auto-fill, minmax(130px, 1fr)); }
+    .movie-poster { width: 90px; min-width: 90px; height: 135px; }
+    .movie-title { font-size: 18px; }
+    .trend-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 }
 
-/* ============================================================
-   RESPONSIVE — PHONE (<= 640px)
-   ============================================================ */
 @media (max-width: 640px) {
     .block-container {
         padding-left: 0.75rem !important;
@@ -424,10 +409,9 @@ def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
 
 
 # ============================================================
-# TMDb API — SAFE KEY LOADING
+# TMDb API
 # ============================================================
 def get_tmdb_key():
-    """Read the TMDb API key from Streamlit secrets. Return None if missing."""
     try:
         return st.secrets["TMDB_API_KEY"]
     except Exception:
@@ -440,13 +424,10 @@ TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w500"
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_trending_movies(limit: int = 12):
-    """Fetch trending movies this week from TMDb (cached 1 hour)."""
     if not TMDB_API_KEY:
         return []
-
     url = "https://api.themoviedb.org/3/trending/movie/week"
     params = {"api_key": TMDB_API_KEY, "language": "en-US"}
-
     try:
         r = requests.get(url, params=params, timeout=10)
         r.raise_for_status()
@@ -471,13 +452,10 @@ def fetch_trending_movies(limit: int = 12):
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_poster_by_id(movie_id):
-    """Fetch poster by TMDb id (cached 24 hours)."""
     if not TMDB_API_KEY or not movie_id:
         return None
-
     url = f"https://api.themoviedb.org/3/movie/{movie_id}"
     params = {"api_key": TMDB_API_KEY, "language": "en-US"}
-
     try:
         r = requests.get(url, params=params, timeout=8)
         r.raise_for_status()
@@ -491,15 +469,12 @@ def fetch_poster_by_id(movie_id):
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_poster_by_title(title: str, year: str = None):
-    """Fallback: look up a poster by title (cached 24 hours)."""
     if not TMDB_API_KEY:
         return None
-
     url = "https://api.themoviedb.org/3/search/movie"
     params = {"api_key": TMDB_API_KEY, "query": title, "language": "en-US"}
     if year:
         params["year"] = year
-
     try:
         r = requests.get(url, params=params, timeout=8)
         r.raise_for_status()
@@ -706,7 +681,8 @@ if st.button("FIND MY MATCH", use_container_width=True):
 
                 poster = None
                 if TMDB_API_KEY:
-                    poster = fetch_poster_by_id if not poster:
+                    poster = fetch_poster_by_id(row.get("id"))
+                    if not poster:
                         poster = fetch_poster_by_title(row["title"])
 
                 poster_html = (
