@@ -1,6 +1,7 @@
 """
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
+Uses unicode glyphs (no external icon font) for reliable rendering.
 """
 
 import ast
@@ -63,11 +64,31 @@ def html_block(markup: str):
     st.markdown(textwrap.dedent(markup).strip(), unsafe_allow_html=True)
 
 
+# Unicode glyphs — render instantly, no font loading needed
+GLYPHS = {
+    "movie_filter": "▣", "movie": "▣",
+    "home": "⌂", "grid_view": "▦", "search": "⌕",
+    "favorite": "♥", "star": "★",
+    "local_fire_department": "▲", "bolt": "⚡",
+    "notifications_none": "◔", "account_circle": "◉",
+    "expand_more": "▾", "today": "◈", "explore": "✦",
+    "auto_awesome": "✦", "history": "◔", "tune": "≡",
+    "lightbulb": "◐",
+    # genre glyphs
+    "flash_on": "⚡", "animation": "◐", "theater_comedy": "☺",
+    "fingerprint": "❋", "videocam": "▷", "masks": "☺",
+    "family_restroom": "♥", "history_edu": "◈",
+    "sentiment_very_dissatisfied": "☹", "music_note": "♪",
+    "rocket_launch": "▲", "military_tech": "★", "landscape": "▽",
+}
+
+
 def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
+    glyph = GLYPHS.get(name, "●")
     return (
-        f'<span class="material-icons-round" '
-        f'style="font-size:{size}px;color:{color};vertical-align:middle;">'
-        f'{name}</span>'
+        f'<span style="font-size:{size}px;color:{color};'
+        f'vertical-align:middle;font-family:Arial,sans-serif;line-height:1;">'
+        f'{glyph}</span>'
     )
 
 
@@ -79,32 +100,17 @@ def make_poster_placeholder(title: str, height: str = "100%") -> str:
         f'display:flex;flex-direction:column;align-items:center;'
         f'justify-content:center;color:white;text-align:center;padding:12px;'
         f'border-radius:8px;">'
-        f'<span class="material-icons-round" style="font-size:36px;opacity:0.9;">movie</span>'
+        f'<span style="font-size:36px;opacity:0.9;">▣</span>'
         f'<span style="margin-top:8px;font-size:12px;font-weight:700;line-height:1.2;">{short}</span>'
         f'</div>'
     )
 
 
 # ============================================================
-# CSS — using st.html() for bulletproof rendering
+# CSS — plain CSS, no external icon font
 # ============================================================
 st.html("""
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 <style>
-.material-icons-round {
-    font-family: 'Material Icons Round' !important;
-    font-weight: normal !important;
-    font-style: normal !important;
-    font-size: 24px;
-    line-height: 1;
-    letter-spacing: normal;
-    text-transform: none;
-    display: inline-block;
-    white-space: nowrap;
-    direction: ltr;
-    -webkit-font-feature-settings: 'liga';
-    -webkit-font-smoothing: antialiased;
-}
 :root {
     --netflix-red: #E50914;
     --netflix-red-hover: #F40612;
@@ -156,11 +162,12 @@ st.html("""
     content: ''; position: absolute; left: 12px; right: 12px; bottom: 0;
     height: 2px; background: var(--netflix-red); border-radius: 2px;
 }
-.nav-link .material-icons-round {
-    font-size: 20px !important; color: #b3b3b3; transition: color 0.2s ease;
+.nav-link .nav-icon {
+    font-size: 18px; color: #b3b3b3; transition: color 0.2s ease;
+    font-family: Arial, sans-serif; line-height: 1;
 }
-.nav-link:hover .material-icons-round,
-.nav-link.active .material-icons-round { color: var(--netflix-red) !important; }
+.nav-link:hover .nav-icon,
+.nav-link.active .nav-icon { color: var(--netflix-red); }
 
 .hero-banner {
     background: linear-gradient(135deg, #1a0505 0%, #2d0a0a 40%, #141414 100%);
@@ -233,6 +240,10 @@ st.html("""
     display: flex; flex-direction: column; justify-content: space-between;
     padding: 14px 16px;
 }
+.genre-icon-glyph {
+    font-size: 30px; color: rgba(255,255,255,0.25);
+    font-family: Arial, sans-serif; line-height: 1;
+}
 .genre-name { font-size: 18px; font-weight: 800; color: white; margin: 0; }
 .genre-count {
     font-size: 12.5px; color: #e5e5e5; margin-top: 2px;
@@ -292,7 +303,6 @@ st.html("""
     background-color: var(--netflix-red-hover) !important;
     box-shadow: 0 6px 20px rgba(229,9,20,0.5) !important;
 }
-
 .footer { text-align: center; padding: 40px 0 20px; color: #555; font-size: 12px; }
 
 @media (max-width: 768px) {
@@ -512,9 +522,10 @@ wl_count = len(st.session_state.watchlist)
 
 def nav_item(page: str, icon_name: str, label: str) -> str:
     active = "active" if current_page == page else ""
+    glyph = GLYPHS.get(icon_name, "●")
     return (
         f'<a class="nav-link {active}" href="?page={page}" target="_self">'
-        f'<span class="material-icons-round">{icon_name}</span>'
+        f'<span class="nav-icon">{glyph}</span>'
         f'<span>{label}</span>'
         f'</a>'
     )
@@ -523,13 +534,13 @@ def nav_item(page: str, icon_name: str, label: str) -> str:
 header_html = f"""
 <div class="cinematch-header">
     <div class="cinematch-logo-row">
-        <span class="material-icons-round cinematch-logo-icon">movie_filter</span>
+        <span class="cinematch-logo-icon" style="font-family:Arial,sans-serif;line-height:1;">▣</span>
         <div class="cinematch-logo">CINEMATCH</div>
     </div>
     <div class="header-icons">
-        <span class="material-icons-round" style="color:#e5e5e5;font-size:24px;">notifications_none</span>
-        <span class="material-icons-round" style="color:#e5e5e5;font-size:26px;">account_circle</span>
-        <span class="material-icons-round" style="color:#e5e5e5;font-size:18px;">expand_more</span>
+        <span style="color:#e5e5e5;font-size:22px;font-family:Arial,sans-serif;line-height:1;">◔</span>
+        <span style="color:#e5e5e5;font-size:24px;font-family:Arial,sans-serif;line-height:1;">◉</span>
+        <span style="color:#e5e5e5;font-size:16px;font-family:Arial,sans-serif;line-height:1;">▾</span>
     </div>
 </div>
 """
@@ -704,10 +715,11 @@ def render_browse():
             count = count_genre_movies(df, genre)
             label = GENRE_LABELS.get(genre, genre)
             icon_name = GENRE_ICONS.get(genre, "movie")
+            glyph = GLYPHS.get(icon_name, "●")
             html_block(f"""
             <div class="genre-card">
                 <div class="genre-card-scrim">
-                    <span class="material-icons-round" style="font-size:28px;color:rgba(255,255,255,0.25);">{icon_name}</span>
+                    <span class="genre-icon-glyph">{glyph}</span>
                     <div>
                         <div class="genre-name">{label}</div>
                         <div class="genre-count"><span class="dot"></span> {count:,} movies</div>
