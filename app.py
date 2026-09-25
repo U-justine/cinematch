@@ -35,10 +35,6 @@ if "page" in qp:
 elif "page" not in st.session_state:
     st.session_state.page = "home"
 
-
-# ============================================================
-# SESSION STATE
-# ============================================================
 for key, default in {
     "watchlist": [],
     "history": [],
@@ -63,7 +59,7 @@ def esc(text) -> str:
 
 
 def html_block(markup: str):
-    """Strip ALL leading whitespace so Streamlit renders HTML correctly."""
+    """Render HTML correctly — strip all leading whitespace."""
     st.markdown(textwrap.dedent(markup).strip(), unsafe_allow_html=True)
 
 
@@ -90,9 +86,9 @@ def make_poster_placeholder(title: str, height: str = "100%") -> str:
 
 
 # ============================================================
-# CSS
+# CSS — using st.html() for bulletproof rendering
 # ============================================================
-st.markdown("""
+st.html("""
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 <style>
 .material-icons-round {
@@ -308,7 +304,7 @@ st.markdown("""
     .nav-link { font-size: 13px; padding: 12px 12px 14px; }
 }
 </style>
-""", unsafe_allow_html=True)
+""")
 
 
 # ============================================================
@@ -744,11 +740,11 @@ def render_search():
         with st.spinner("Finding your matches…"):
             results = recommend(df, sim, query, n=n)
         if results.empty:
-            st.error(f'No movies found matching “{query}”.')
+            st.error(f'No movies found matching "{query}".')
             return
         html_block(
             f'<div class="section-title" style="margin-top:18px;">'
-            f'{icon("auto_awesome", 22)} Because you liked “{esc(query.title())}”</div>'
+            f'{icon("auto_awesome", 22)} Because you liked "{esc(query.title())}"</div>'
         )
         for _, row in results.iterrows():
             render_movie_result_card(row, show_similarity=True)
