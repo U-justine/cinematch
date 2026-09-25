@@ -1,6 +1,6 @@
 """
 CineMatch — Netflix-style movie recommender
-Full corrected version: Material Icons + HTML nav + clean rendering
+Streamlit Cloud-ready with TMDb API integration.
 """
 
 import ast
@@ -14,15 +14,17 @@ import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+
 # ============================================================
 # PAGE CONFIG
 # ============================================================
 st.set_page_config(
     page_title="CineMatch — Your Next Favorite Film",
-    page_icon="🎬",
+    page_icon=":movie_camera:",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
 
 # ============================================================
 # QUERY PARAM ROUTER
@@ -32,6 +34,7 @@ if "page" in qp:
     st.session_state.page = qp["page"]
 elif "page" not in st.session_state:
     st.session_state.page = "home"
+
 
 # ============================================================
 # SESSION STATE
@@ -51,15 +54,18 @@ if st.query_params.get("g") == "none":
 if "genre" in st.query_params and st.query_params["genre"]:
     st.session_state.selected_genre = st.query_params["genre"]
 
+
 # ============================================================
 # HELPERS
 # ============================================================
 def esc(text) -> str:
     return html.escape(str(text))
 
+
 def html_block(markup: str):
-    """Strip ALL leading whitespace so Streamlit never treats HTML as code."""
+    """Strip ALL leading whitespace so Streamlit renders HTML correctly."""
     st.markdown(textwrap.dedent(markup).strip(), unsafe_allow_html=True)
+
 
 def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
     return (
@@ -67,6 +73,7 @@ def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
         f'style="font-size:{size}px;color:{color};vertical-align:middle;">'
         f'{name}</span>'
     )
+
 
 def make_poster_placeholder(title: str, height: str = "100%") -> str:
     short = esc((title[:22] + "…") if len(title) > 22 else title)
@@ -81,14 +88,13 @@ def make_poster_placeholder(title: str, height: str = "100%") -> str:
         f'</div>'
     )
 
+
 # ============================================================
-# CSS (with reliable Material Icons loading)
+# CSS
 # ============================================================
 st.markdown("""
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Round');
-
 .material-icons-round {
     font-family: 'Material Icons Round' !important;
     font-weight: normal !important;
@@ -103,7 +109,6 @@ st.markdown("""
     -webkit-font-feature-settings: 'liga';
     -webkit-font-smoothing: antialiased;
 }
-
 :root {
     --netflix-red: #E50914;
     --netflix-red-hover: #F40612;
@@ -111,7 +116,6 @@ st.markdown("""
     --netflix-card: #1f1f1f;
     --netflix-muted: #B3B3B3;
 }
-
 .stApp {
     background-color: var(--netflix-black);
     color: white;
@@ -179,12 +183,10 @@ st.markdown("""
     font-size: 15px; color: rgba(255,255,255,0.85);
     max-width: 480px; line-height: 1.5;
 }
-
 .section-title {
     color: white; font-size: 22px; font-weight: 800;
     margin: 8px 0 16px 0; display: flex; align-items: center; gap: 10px;
 }
-
 .shelf {
     display: flex; gap: 12px; overflow-x: auto;
     padding-bottom: 12px; margin-bottom: 8px;
@@ -266,19 +268,7 @@ st.markdown("""
 .result-meta .match { color: var(--netflix-red); display: flex; align-items: center; gap: 3px; }
 .result-overview { font-size: 12.5px; color: var(--netflix-muted); line-height: 1.5; }
 
-.watch-card {
-    position: relative; border-radius: 10px; overflow: hidden;
-    background: var(--netflix-card); transition: transform 0.2s ease; margin-bottom: 6px;
-}
-.watch-card:hover { transform: scale(1.03); }
-.watch-poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; }
-.watch-rating-badge {
-    position: absolute; top: 8px; left: 8px;
-    background: rgba(20,20,20,0.85); border-radius: 6px; padding: 3px 7px;
-    font-size: 12px; font-weight: 700; color: #f5c518;
-    display: flex; align-items: center; gap: 3px;
-}
-.watch-info { padding: 10px 12px 4px; }
+.watch-info { padding: 10px 4px 4px; }
 .watch-title { font-size: 13px; font-weight: 700; color: white; margin: 0 0 2px 0; line-height: 1.3; }
 .watch-year { font-size: 11.5px; color: var(--netflix-muted); }
 
@@ -320,6 +310,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ============================================================
 # TMDb API
 # ============================================================
@@ -329,8 +320,10 @@ def get_tmdb_key():
     except Exception:
         return None
 
+
 TMDB_API_KEY = get_tmdb_key()
 TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w500"
+
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_trending_movies(limit: int = 12):
@@ -357,6 +350,7 @@ def fetch_trending_movies(limit: int = 12):
     except Exception:
         return []
 
+
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_poster_by_id(movie_id):
     if not TMDB_API_KEY or not movie_id:
@@ -374,6 +368,7 @@ def fetch_poster_by_id(movie_id):
     except Exception:
         pass
     return None
+
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_poster_by_title(title: str):
@@ -393,6 +388,7 @@ def fetch_poster_by_title(title: str):
         pass
     return None
 
+
 # ============================================================
 # DATA + NLP ENGINE
 # ============================================================
@@ -402,6 +398,7 @@ DATASET_URL = (
     "master/tmdb_5000_movies.csv"
 )
 
+
 @st.cache_data(show_spinner=False)
 def load_data() -> pd.DataFrame:
     try:
@@ -410,6 +407,7 @@ def load_data() -> pd.DataFrame:
         st.error(f"Could not load the movie dataset. Error: {e}")
         st.stop()
 
+
 def _parse_names(text: str) -> str:
     try:
         items = ast.literal_eval(text)
@@ -417,8 +415,10 @@ def _parse_names(text: str) -> str:
     except Exception:
         return ""
 
+
 def _clean(text) -> str:
     return text.lower().strip() if isinstance(text, str) else ""
+
 
 @st.cache_resource(show_spinner="Loading CineMatch engine…")
 def build_engine():
@@ -437,6 +437,7 @@ def build_engine():
     sim = cosine_similarity(matrix, matrix)
     return df, sim
 
+
 def recommend(df, sim, title, n=10, genre_filter=None):
     title = title.lower().strip()
     matches = df[df["title"].str.lower() == title]
@@ -453,6 +454,7 @@ def recommend(df, sim, title, n=10, genre_filter=None):
         mask = result["genres"].apply(lambda g: any(gen.lower() in g for gen in genre_filter))
         result = result[mask]
     return result.head(n)
+
 
 # ============================================================
 # GENRE + WATCHLIST HELPERS
@@ -473,6 +475,7 @@ BROWSE_GENRES = [
     "Animation", "Adventure", "Crime", "Documentary",
 ]
 
+
 def get_genre_movies(df, genre_name, n=16):
     mask = df["genres"].str.contains(genre_name.lower(), na=False)
     filtered = df[mask].copy()
@@ -480,8 +483,10 @@ def get_genre_movies(df, genre_name, n=16):
         filtered = filtered.sort_values("vote_average", ascending=False)
     return filtered.head(n)
 
+
 def count_genre_movies(df, genre_name):
     return int(df["genres"].str.contains(genre_name.lower(), na=False).sum())
+
 
 def add_to_watchlist(movie_id, title, poster=None, rating=None, year=None):
     for m in st.session_state.watchlist:
@@ -493,17 +498,21 @@ def add_to_watchlist(movie_id, title, poster=None, rating=None, year=None):
     })
     return True
 
+
 def remove_from_watchlist(movie_id):
     st.session_state.watchlist = [m for m in st.session_state.watchlist if m["id"] != movie_id]
 
+
 def is_in_watchlist(movie_id):
     return any(m["id"] == movie_id for m in st.session_state.watchlist)
+
 
 # ============================================================
 # HEADER + NAV
 # ============================================================
 current_page = st.session_state.page
 wl_count = len(st.session_state.watchlist)
+
 
 def nav_item(page: str, icon_name: str, label: str) -> str:
     active = "active" if current_page == page else ""
@@ -513,6 +522,7 @@ def nav_item(page: str, icon_name: str, label: str) -> str:
         f'<span>{label}</span>'
         f'</a>'
     )
+
 
 header_html = f"""
 <div class="cinematch-header">
@@ -540,10 +550,12 @@ nav_html = f"""
 html_block(header_html)
 html_block(nav_html)
 
+
 # ============================================================
 # LOAD ENGINE
 # ============================================================
 df, sim = build_engine()
+
 
 # ============================================================
 # RENDER HELPERS
@@ -564,6 +576,7 @@ def render_shelf_card(title, poster, rating, year=None):
         </div>
     </div>
     """
+
 
 def render_movie_result_card(row, show_similarity=True):
     movie_id = row.get("id")
@@ -613,8 +626,9 @@ def render_movie_result_card(row, show_similarity=True):
                 add_to_watchlist(movie_id, row["title"], poster, f"{rating:.1f}", year)
             st.rerun()
 
+
 # ============================================================
-# PAGES
+# PAGE: HOME
 # ============================================================
 def render_home():
     html_block("""
@@ -628,7 +642,6 @@ def render_home():
     </div>
     """)
 
-    # Movie of the Day
     html_block(f'<div class="section-title">{icon("today", 22)} Movie of the Day</div>')
     seed = int(datetime.date.today().strftime("%Y%m%d"))
     random.seed(seed)
@@ -655,7 +668,6 @@ def render_home():
         </div>
         """)
 
-    # Trending
     if TMDB_API_KEY:
         html_block(f'<div class="section-title">{icon("local_fire_department", 22)} Trending This Week</div>')
         trending = fetch_trending_movies(12)
@@ -668,6 +680,10 @@ def render_home():
         else:
             st.info("Trending unavailable right now.")
 
+
+# ============================================================
+# PAGE: BROWSE
+# ============================================================
 def render_browse():
     if st.session_state.selected_genre:
         genre = st.session_state.selected_genre
@@ -707,6 +723,10 @@ def render_browse():
                 st.session_state.selected_genre = genre
                 st.rerun()
 
+
+# ============================================================
+# PAGE: SEARCH
+# ============================================================
 def render_search():
     html_block(f'<div class="section-title">{icon("search", 22)} Search Movies</div>')
 
@@ -733,6 +753,10 @@ def render_search():
         for _, row in results.iterrows():
             render_movie_result_card(row, show_similarity=True)
 
+
+# ============================================================
+# PAGE: WATCHLIST
+# ============================================================
 def render_watchlist():
     html_block(f'<div class="section-title">{icon("favorite", 22)} My Watchlist</div>')
     html_block(f'<div style="color:#B3B3B3;font-size:14px;margin-bottom:18px;">{len(st.session_state.watchlist)} titles saved</div>')
@@ -766,6 +790,7 @@ def render_watchlist():
                 remove_from_watchlist(m["id"])
                 st.rerun()
 
+
 # ============================================================
 # ROUTER
 # ============================================================
@@ -778,6 +803,10 @@ elif st.session_state.page == "search":
 elif st.session_state.page == "watchlist":
     render_watchlist()
 
+
+# ============================================================
+# FOOTER
+# ============================================================
 html_block(f"""
 <div class="footer">
     CINEMATCH · Powered by NLP & TF-IDF · {icon('favorite', 12)}
