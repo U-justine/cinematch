@@ -74,9 +74,9 @@ NETFLIX_CSS = """
 }
 .cinematch-header {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 16px; padding: 16px 28px;
+    gap: 16px; padding: 14px 24px;
     background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(20,20,20,0) 100%);
-    border-radius: 8px; margin-bottom: 16px; flex-wrap: wrap;
+    border-radius: 8px; margin-bottom: 8px; flex-wrap: wrap;
 }
 .cinematch-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .cinematch-logo {
@@ -119,6 +119,8 @@ NETFLIX_CSS = """
     border-radius: 4px !important;
     color: var(--netflix-white) !important;
 }
+
+/* NAV BUTTONS — slim, horizontal, red */
 .stButton > button {
     background-color: var(--netflix-red);
     color: var(--netflix-white);
@@ -130,6 +132,7 @@ NETFLIX_CSS = """
     background-color: var(--netflix-red-hover);
     transform: scale(1.02); box-shadow: 0 6px 20px rgba(229,9,20,0.55);
 }
+
 .movie-card {
     background: linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%);
     border-radius: 8px; padding: 20px 22px; margin: 12px 0;
@@ -240,6 +243,7 @@ NETFLIX_CSS = """
     text-align: center; padding: 40px 0 20px 0;
     color: var(--netflix-gray); font-size: 12px; line-height: 1.6;
 }
+
 @media (max-width: 992px) {
     .cinematch-logo { font-size: 26px; }
     .hero-title { font-size: 30px; }
@@ -248,10 +252,12 @@ NETFLIX_CSS = """
     .motd-title { font-size: 22px; }
     .genre-name { font-size: 16px; }
 }
+
 @media (max-width: 640px) {
     .block-container { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
-    .cinematch-header { padding: 12px 16px; flex-direction: column; align-items: flex-start; gap: 10px; }
+    .cinematch-header { padding: 10px 14px; flex-direction: column; align-items: flex-start; gap: 6px; }
     .cinematch-logo { font-size: 22px; }
+    .cinematch-tagline { font-size: 9px; }
     .hero-banner { padding: 28px 16px; }
     .hero-title { font-size: 22px; }
     .hero-subtitle { font-size: 12px; }
@@ -261,7 +267,15 @@ NETFLIX_CSS = """
     .motd-banner { flex-direction: column; padding: 20px; }
     .motd-title { font-size: 20px; }
     .genre-name { font-size: 15px; }
+
+    /* Nav buttons tighter so all 4 fit in one row on mobile */
+    .stButton > button {
+        padding: 9px 4px !important;
+        font-size: 10.5px !important;
+        letter-spacing: 0.2px !important;
+    }
 }
+
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 header { visibility: hidden; }
@@ -464,7 +478,7 @@ def search_titles(df, query, limit=5):
 
 
 # ============================================================
-# GENRE BROWSE HELPERS
+# GENRE HELPERS
 # ============================================================
 GENRE_ICONS = {
     "Action": "flash_on",
@@ -514,10 +528,6 @@ def count_genre_movies(df, genre_name):
     return int(df["genres"].str.contains(genre_key, na=False).sum())
 
 
-def get_all_genres(df) -> list:
-    return BROWSE_GENRES
-
-
 # ============================================================
 # WATCHLIST HELPERS
 # ============================================================
@@ -560,24 +570,31 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([1, 1, 1, 1, 2])
+nav_col1, nav_col2, nav_col3, nav_col4 = st.columns([1, 1, 1, 1.2])
+
 with nav_col1:
     if st.button("HOME", use_container_width=True, key="nav_home"):
         st.session_state.page = "home"
         st.session_state.selected_genre = None
         st.rerun()
+
 with nav_col2:
     if st.button("BROWSE", use_container_width=True, key="nav_browse"):
         st.session_state.page = "browse"
         st.session_state.selected_genre = None
         st.rerun()
+
 with nav_col3:
     if st.button("SEARCH", use_container_width=True, key="nav_search"):
         st.session_state.page = "search"
         st.rerun()
+
 with nav_col4:
-    wl_label = f"WATCHLIST ({len(st.session_state.watchlist)})"
-    if st.button(wl_label, use_container_width=True, key="nav_watch"):
+    if st.button(
+        f"WATCHLIST ({len(st.session_state.watchlist)})",
+        use_container_width=True,
+        key="nav_watch",
+    ):
         st.session_state.page = "watchlist"
         st.rerun()
 
