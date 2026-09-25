@@ -2,16 +2,10 @@
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
 Pages: Home, Browse, Search, Watchlist, Collections, Profile.
-Built to match the reference mockups pixel-for-pixel:
-  - Sidebar nav              -> "My Watchlist" mockup
-  - Genre grid (Browse)      -> "Browse by Genre" mockup
-  - Search results grid      -> "Because you liked..." mockup
-CSS lives in style.css (loaded, not inlined) per request.
 """
 
 import ast
 import datetime
-import os
 import random
 import requests
 import pandas as pd
@@ -25,7 +19,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # ============================================================
 st.set_page_config(
     page_title="CineMatch — Your Next Favorite Film",
-    page_icon="🎬",
+    page_icon=":movie_camera:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -41,38 +35,487 @@ for key, default in {
     "genre_filter": [],
     "selected_genre": None,
     "last_search": None,
+    "wl_sort": "Added (Newest)",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
 
 # ============================================================
-# LOAD EXTERNAL STYLESHEET
+# CSS — embedded directly (no external file)
 # ============================================================
-def load_css():
-    css_path = os.path.join(os.path.dirname(__file__), "style.css")
-    with open(css_path, "r", encoding="utf-8") as f:
-        css = f.read()
-    st.markdown(
-        '<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">'
-        '<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">'
-        '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">',
-        unsafe_allow_html=True,
-    )
-    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+CSS = """
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
+<style>
+:root {
+    --red: #E50914;
+    --red-hover: #F40612;
+    --black: #0f0f0f;
+    --panel: #141414;
+    --card: #1b1b1b;
+    --card-2: #1f1f1f;
+    --border: #2a2a2a;
+    --white: #FFFFFF;
+    --muted: #9a9a9a;
+    --gold: #f5c518;
+}
 
-load_css()
+html, body, .stApp {
+    background-color: var(--black) !important;
+    color: var(--white);
+    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+}
+
+#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; height: 0; }
+[data-testid="stToolbar"] { display: none; }
+
+.block-container {
+    padding-top: 1.6rem !important;
+    padding-bottom: 3rem !important;
+    max-width: 1280px !important;
+}
+
+/* ---------- SIDEBAR ---------- */
+section[data-testid="stSidebar"] {
+    background-color: var(--panel) !important;
+    border-right: 1px solid var(--border);
+    min-width: 250px !important;
+    max-width: 260px !important;
+}
+section[data-testid="stSidebar"] > div { padding-top: 1.4rem; }
+[data-testid="stSidebarUserContent"] {
+    display: flex;
+    flex-direction: column;
+    min-height: 92vh;
+}
+
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 4px 20px 4px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+.sidebar-logo-icon {
+    width: 34px; height: 34px;
+    background: var(--red);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.sidebar-logo-text {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+.sidebar-logo-text .cine { color: var(--white); }
+.sidebar-logo-text .match { color: var(--red); }
+
+.sidebar-spacer { flex: 1 1 auto; }
+.sidebar-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 10px 4px 10px 4px;
+}
+
+section[data-testid="stSidebar"] .stButton > button {
+    background-color: transparent !important;
+    border: none !important;
+    border-radius: 8px !important;
+    color: #cfcfcf !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    padding: 10px 12px !important;
+    font-size: 14.5px !important;
+    font-weight: 600 !important;
+    width: 100%;
+    display: flex !important;
+    gap: 12px;
+    box-shadow: none !important;
+}
+section[data-testid="stSidebar"] .stButton > button p { text-align: left !important; }
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background-color: rgba(255,255,255,0.06) !important;
+    color: white !important;
+}
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background-color: rgba(229,9,20,0.12) !important;
+    color: var(--red) !important;
+    border-left: 3px solid var(--red) !important;
+    border-radius: 6px !important;
+}
+
+.mi { vertical-align: middle; }
+
+/* ---------- PAGE HEADERS ---------- */
+.page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+.page-title-row { display: flex; align-items: center; gap: 12px; }
+.page-title {
+    font-size: 34px;
+    font-weight: 900;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+.page-subtitle {
+    color: var(--muted);
+    font-size: 14.5px;
+    margin: 6px 0 26px 0;
+}
+
+/* ---------- HERO ---------- */
+.hero-title {
+    font-size: 34px;
+    font-weight: 900;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.5px;
+}
+.hero-subtitle {
+    color: var(--muted);
+    font-size: 14.5px;
+    margin-bottom: 26px;
+}
+
+/* ---------- GENRE CARDS ---------- */
+.genre-card {
+    position: relative;
+    height: 168px;
+    border-radius: 10px;
+    border: 2px solid var(--red);
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    margin-bottom: 14px;
+    transition: transform 0.2s ease;
+}
+.genre-card:hover { transform: translateY(-3px); }
+
+.genre-scrim {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top,
+        rgba(0,0,0,0.92) 15%,
+        rgba(0,0,0,0.15) 60%,
+        rgba(0,0,0,0.05) 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 14px 16px;
+}
+.genre-icon {
+    color: #fff;
+    opacity: 0.95;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+}
+.genre-name {
+    font-size: 20px;
+    font-weight: 800;
+    color: white;
+    margin: 0;
+}
+.genre-count {
+    font-size: 13px;
+    color: #e0e0e0;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.genre-count .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    display: inline-block;
+}
+
+/* ---------- SEARCH BAR ---------- */
+.search-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 4px 4px 16px;
+    margin-bottom: 26px;
+}
+.search-bar-icon { color: var(--muted); flex-shrink: 0; }
+
+.stTextInput > div > div > input {
+    background-color: transparent !important;
+    border: none !important;
+    color: white !important;
+    font-size: 15px !important;
+    padding: 12px 0 !important;
+}
+.stTextInput > div > div { border: none !important; background: transparent !important; }
+.stTextInput > div { border: none !important; }
+
+.results-heading {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 6px 0 22px 0;
+}
+.results-heading em {
+    color: var(--red);
+    font-style: italic;
+    border-bottom: 2px solid var(--red);
+    padding-bottom: 2px;
+}
+
+/* ---------- RESULT CARDS ---------- */
+.result-card {
+    position: relative;
+    background: var(--card);
+    border: 2px solid var(--red);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 14px;
+}
+.result-poster {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    display: block;
+    background: #111;
+}
+.result-body {
+    padding: 14px 16px 46px 16px;
+    position: relative;
+    min-height: 128px;
+}
+.result-title {
+    font-size: 15.5px;
+    font-weight: 800;
+    color: white;
+    margin: 0 0 2px 0;
+    line-height: 1.25;
+}
+.result-year { color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
+.result-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.result-meta .rating { color: var(--gold); display: flex; align-items: center; gap: 3px; }
+.result-meta .match { color: var(--red); }
+.result-overview { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.result-heart {
+    position: absolute;
+    bottom: 12px; right: 14px;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 1.5px solid #555;
+    display: flex; align-items: center; justify-content: center;
+}
+.result-heart.active {
+    border-color: var(--red);
+    background: rgba(229,9,20,0.12);
+}
+
+/* ---------- WATCHLIST ---------- */
+.watch-count { color: var(--muted); font-size: 14px; margin: 4px 0 24px 0; }
+.watch-card { margin-bottom: 6px; }
+.watch-poster-wrap { position: relative; border-radius: 10px; overflow: hidden; }
+.watch-poster {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    display: block;
+    background: #111;
+}
+.watch-rating-badge {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(20,20,20,0.9);
+    border-radius: 5px;
+    padding: 3px 7px;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--gold);
+    display: flex; align-items: center; gap: 3px;
+}
+.watch-remove-badge {
+    position: absolute; top: 8px; right: 8px;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--red);
+    display: flex; align-items: center; justify-content: center;
+}
+.watch-title { font-size: 14px; font-weight: 800; color: white; margin: 10px 0 2px 0; }
+.watch-year { font-size: 12px; color: var(--muted); }
+
+/* ---------- BUTTONS ---------- */
+div.main .stButton > button {
+    background-color: var(--card-2) !important;
+    color: #e5e5e5 !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+}
+div.main .stButton > button:hover {
+    border-color: var(--red) !important;
+    color: var(--red) !important;
+}
+div.main .stButton > button[kind="primary"] {
+    background-color: var(--red) !important;
+    color: white !important;
+    border: none !important;
+}
+div.main .stButton > button[kind="primary"]:hover {
+    background-color: var(--red-hover) !important;
+}
+
+/* ---------- SELECTS ---------- */
+.stSelectbox > div > div,
+.stMultiSelect > div > div {
+    background-color: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    color: white !important;
+}
+
+/* ---------- EMPTY STATE ---------- */
+.empty-state {
+    padding: 56px 24px;
+    border-radius: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    text-align: center;
+    color: var(--muted);
+}
+
+/* ---------- HOME ---------- */
+.home-hero {
+    background: linear-gradient(135deg, #1a0505 0%, #2a0a0a 45%, #0f0f0f 100%);
+    border-radius: 12px;
+    padding: 46px 40px;
+    margin-bottom: 30px;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.home-hero-label {
+    color: var(--red);
+    font-weight: 700;
+    font-size: 12.5px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+.home-hero-title {
+    font-size: 38px;
+    font-weight: 900;
+    margin: 0 0 10px 0;
+    letter-spacing: -0.5px;
+}
+.home-hero-sub {
+    color: #d5d5d5;
+    font-size: 15px;
+    max-width: 480px;
+    line-height: 1.5;
+}
+
+.section-title {
+    font-size: 21px;
+    font-weight: 800;
+    margin: 30px 0 14px 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.shelf { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; }
+.shelf::-webkit-scrollbar { height: 6px; }
+.shelf::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+.shelf-card { flex: 0 0 155px; background: var(--card); border-radius: 8px; overflow: hidden; }
+.shelf-poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: #111; }
+.shelf-info { padding: 9px 11px 12px; }
+.shelf-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+}
+.shelf-meta {
+    font-size: 11.5px;
+    color: var(--gold);
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.motd-banner {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 26px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 24px;
+    border-left: 4px solid var(--red);
+}
+.motd-poster { width: 130px; min-width: 130px; height: 195px; object-fit: cover; border-radius: 8px; }
+.motd-label {
+    color: var(--red);
+    font-weight: 800;
+    font-size: 11.5px;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.motd-title { font-size: 24px; font-weight: 900; margin: 0 0 8px 0; }
+.motd-overview { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 768px) {
+    section[data-testid="stSidebar"] {
+        min-width: 220px !important;
+        max-width: 220px !important;
+    }
+    .hero-title, .page-title { font-size: 26px; }
+    .home-hero { padding: 32px 20px; }
+    .home-hero-title { font-size: 28px; }
+    .motd-banner { flex-direction: column; }
+    .motd-poster { width: 100%; max-width: 260px; height: auto; }
+    .shelf-card { flex: 0 0 130px; }
+    .genre-card { height: 140px; }
+    .genre-name { font-size: 17px; }
+}
+
+@media (max-width: 480px) {
+    .hero-title, .page-title { font-size: 22px; }
+    .results-heading { font-size: 20px; }
+}
+</style>
+"""
+
+st.markdown(CSS, unsafe_allow_html=True)
 
 
 # ============================================================
-# ICON HELPERS (Material Icons only — never emoji)
+# ICON HELPERS
 # ============================================================
 def icon(name: str, size: int = 20, color: str = "currentColor", outlined: bool = False) -> str:
     cls = "material-icons-outlined" if outlined else "material-icons-round"
-    return (
-        f'<span class="{cls} mi" style="font-size:{size}px;color:{color};">{name}</span>'
-    )
+    return f'<span class="{cls} mi" style="font-size:{size}px;color:{color};">{name}</span>'
 
 
 # ============================================================
@@ -94,10 +537,12 @@ TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w780"
 def fetch_trending_movies(limit: int = 12):
     if not TMDB_API_KEY:
         return []
-    url = "https://api.themoviedb.org/3/trending/movie/week"
-    params = {"api_key": TMDB_API_KEY, "language": "en-US"}
     try:
-        r = requests.get(url, params=params, timeout=10)
+        r = requests.get(
+            "https://api.themoviedb.org/3/trending/movie/week",
+            params={"api_key": TMDB_API_KEY, "language": "en-US"},
+            timeout=10,
+        )
         r.raise_for_status()
         results = r.json().get("results", [])[:limit]
         return [
@@ -118,10 +563,12 @@ def fetch_trending_movies(limit: int = 12):
 def fetch_poster_by_id(movie_id):
     if not TMDB_API_KEY or not movie_id:
         return None, None
-    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-    params = {"api_key": TMDB_API_KEY, "language": "en-US"}
     try:
-        r = requests.get(url, params=params, timeout=8)
+        r = requests.get(
+            f"https://api.themoviedb.org/3/movie/{movie_id}",
+            params={"api_key": TMDB_API_KEY, "language": "en-US"},
+            timeout=8,
+        )
         r.raise_for_status()
         data = r.json()
         poster = f"{TMDB_IMG_BASE}{data['poster_path']}" if data.get("poster_path") else None
@@ -135,12 +582,11 @@ def fetch_poster_by_id(movie_id):
 def fetch_poster_by_title(title: str, year: str = None):
     if not TMDB_API_KEY:
         return None
-    url = "https://api.themoviedb.org/3/search/movie"
-    params = {"api_key": TMDB_API_KEY, "query": title, "language": "en-US"}
-    if year:
-        params["year"] = year
     try:
-        r = requests.get(url, params=params, timeout=8)
+        params = {"api_key": TMDB_API_KEY, "query": title, "language": "en-US"}
+        if year:
+            params["year"] = year
+        r = requests.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=8)
         r.raise_for_status()
         results = r.json().get("results", [])
         if results and results[0].get("poster_path"):
@@ -161,16 +607,17 @@ GENRE_ID_MAP = {
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_genre_backdrop(genre_name: str):
-    """Representative backdrop image for a genre, used on the Browse cards."""
     if not TMDB_API_KEY:
         return None
     gid = GENRE_ID_MAP.get(genre_name)
     if not gid:
         return None
-    url = "https://api.themoviedb.org/3/discover/movie"
-    params = {"api_key": TMDB_API_KEY, "with_genres": gid, "sort_by": "popularity.desc"}
     try:
-        r = requests.get(url, params=params, timeout=8)
+        r = requests.get(
+            "https://api.themoviedb.org/3/discover/movie",
+            params={"api_key": TMDB_API_KEY, "with_genres": gid, "sort_by": "popularity.desc"},
+            timeout=8,
+        )
         r.raise_for_status()
         results = r.json().get("results", [])
         if results and results[0].get("backdrop_path"):
@@ -181,7 +628,6 @@ def fetch_genre_backdrop(genre_name: str):
 
 
 def poster_placeholder_style(seed_text: str) -> str:
-    """Deterministic dark gradient fallback so cards never look broken without an API key."""
     palettes = [
         "#3a0a0a,#120202", "#0a1a3a,#020712", "#1a0a3a,#070212",
         "#0a3a1a,#021207", "#3a1a0a,#120702",
@@ -273,7 +719,7 @@ def search_titles(df, query, limit=5):
 
 
 # ============================================================
-# GENRE CONFIG (icons + order match the "Browse by Genre" mockup)
+# GENRE CONFIG
 # ============================================================
 GENRE_ICONS = {
     "Action": "bolt",
@@ -289,15 +735,12 @@ GENRE_ICONS = {
     "Crime": "shield",
     "Documentary": "camera_alt",
 }
-
 GENRE_LABELS = {"Science Fiction": "Sci-Fi"}
-
 BROWSE_GENRES = list(GENRE_ICONS.keys())
 
 
 def get_genre_movies(df, genre_name, n=20):
-    genre_key = genre_name.lower()
-    mask = df["genres"].str.contains(genre_key, na=False)
+    mask = df["genres"].str.contains(genre_name.lower(), na=False)
     filtered = df[mask].copy()
     if "vote_average" in filtered.columns:
         filtered = filtered.sort_values("vote_average", ascending=False)
@@ -331,7 +774,7 @@ def is_in_watchlist(movie_id):
 
 
 # ============================================================
-# SIDEBAR NAVIGATION — matches "My Watchlist" mockup exactly
+# SIDEBAR NAVIGATION
 # ============================================================
 NAV_ITEMS = [
     ("home", "Home", "home"),
@@ -543,7 +986,7 @@ def render_home():
 
 
 # ============================================================
-# PAGE: BROWSE — matches "Browse by Genre" mockup exactly
+# PAGE: BROWSE
 # ============================================================
 def render_browse():
     if st.session_state.selected_genre:
@@ -605,20 +1048,19 @@ def render_browse():
 
 
 # ============================================================
-# PAGE: SEARCH — matches "Because you liked..." mockup exactly
+# PAGE: SEARCH
 # ============================================================
 def render_search():
-    with st.container():
-        col_icon, col_input, col_btn = st.columns([0.4, 8, 0.8])
-        with col_icon:
-            st.markdown(f'<div style="padding-top:12px;">{icon("search", 20, "#888")}</div>', unsafe_allow_html=True)
-        with col_input:
-            query = st.text_input(
-                "Search", placeholder="Try: The Dark Knight, Inception, Avatar…",
-                label_visibility="collapsed", key="search_query",
-            )
-        with col_btn:
-            go = st.button("🔍", key="search_go_btn", use_container_width=True, type="primary")
+    col_icon, col_input, col_btn = st.columns([0.4, 8, 0.8])
+    with col_icon:
+        st.markdown(f'<div style="padding-top:12px;">{icon("search", 20, "#888")}</div>', unsafe_allow_html=True)
+    with col_input:
+        query = st.text_input(
+            "Search", placeholder="Try: The Dark Knight, Inception, Avatar…",
+            label_visibility="collapsed", key="search_query",
+        )
+    with col_btn:
+        go = st.button("Go", key="search_go_btn", use_container_width=True, type="primary")
 
     if st.session_state.history:
         hist = "  ·  ".join(st.session_state.history)
@@ -671,7 +1113,7 @@ def render_search():
 
 
 # ============================================================
-# PAGE: WATCHLIST — matches "My Watchlist" mockup exactly
+# PAGE: WATCHLIST
 # ============================================================
 def render_watchlist():
     st.markdown(
@@ -756,7 +1198,7 @@ def render_watchlist():
 
 
 # ============================================================
-# PAGE: COLLECTIONS (placeholder — sidebar link target)
+# PAGE: COLLECTIONS
 # ============================================================
 def render_collections():
     st.markdown('<h1 class="page-title">Collections</h1>', unsafe_allow_html=True)
@@ -773,7 +1215,7 @@ def render_collections():
 
 
 # ============================================================
-# PAGE: PROFILE (placeholder — sidebar link target)
+# PAGE: PROFILE
 # ============================================================
 def render_profile():
     st.markdown('<h1 class="page-title">Profile</h1>', unsafe_allow_html=True)
