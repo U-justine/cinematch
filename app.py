@@ -2,7 +2,6 @@
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
 Pages: Home, Browse, Search, Watchlist.
-Redesigned to match the reference UI mockups exactly (icon badges, not emoji).
 """
 
 import ast
@@ -42,7 +41,7 @@ for key, default in {
 
 
 # ============================================================
-# ICON HELPER (Material Icons — NEVER emoji)
+# ICON HELPERS — Material Icons Round
 # ============================================================
 def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
     return (
@@ -54,7 +53,6 @@ def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
 
 def icon_badge(name: str, size: int = 34, icon_size: int = 18,
                bg: str = "rgba(255,255,255,0.95)", color: str = "#141414") -> str:
-    """White circular icon badge, like the reference mockups (genre cards, ratings)."""
     return (
         f'<div style="width:{size}px;height:{size}px;border-radius:50%;'
         f'background:{bg};display:flex;align-items:center;justify-content:center;'
@@ -65,13 +63,31 @@ def icon_badge(name: str, size: int = 34, icon_size: int = 18,
 
 
 # ============================================================
-# NETFLIX-STYLE CSS (matched to the mockups)
+# NETFLIX-STYLE CSS — icons via @import (fixes missing icons)
 # ============================================================
 NETFLIX_CSS = """
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-
 <style>
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Round');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+/* Force Material Icons to load correctly */
+.material-icons-round {
+    font-family: 'Material Icons Round' !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
 :root {
     --netflix-red: #E50914;
     --netflix-red-hover: #F40612;
@@ -90,47 +106,63 @@ NETFLIX_CSS = """
 }
 
 .block-container {
-    padding-top: 0.8rem !important;
+    padding-top: 0.6rem !important;
     padding-bottom: 3rem !important;
-    max-width: 1400px !important;
+    max-width: 1500px !important;
 }
 
 #MainMenu, footer, header {visibility: hidden;}
 [data-testid="stToolbar"] {display: none;}
 
-/* ---------- HEADER / TOP NAV ---------- */
+/* ---------- HEADER — NETFLIX PROPORTIONS ---------- */
 .cinematch-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 8px;
-    margin-bottom: 4px;
-    border-bottom: 1px solid #262626;
+    padding: 16px 12px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #1f1f1f;
 }
 
-.cinematch-logo-row { display: flex; align-items: center; gap: 8px; }
-
-.cinematch-logo {
-    font-size: 26px;
-    font-weight: 900;
-    color: var(--netflix-red);
-    letter-spacing: -1px;
-    text-transform: uppercase;
-    margin: 0;
+.cinematch-logo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     line-height: 1;
 }
 
-.header-icons { display: flex; align-items: center; gap: 18px; }
+.cinematch-logo {
+    font-size: 34px;
+    font-weight: 900;
+    color: var(--netflix-red);
+    letter-spacing: -1.6px;
+    text-transform: uppercase;
+    margin: 0;
+    line-height: 1;
+    font-family: 'Inter', sans-serif;
+}
+
+.cinematch-logo-icon {
+    font-size: 34px !important;
+    color: var(--netflix-red);
+}
+
+.header-icons {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: #e5e5e5;
+}
 
 /* ---------- NAV BUTTONS ---------- */
 .stButton > button {
     background-color: transparent !important;
     color: #e5e5e5 !important;
     border: none !important;
-    border-radius: 4px !important;
-    padding: 8px 16px !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
+    border-radius: 0 !important;
+    padding: 12px 16px !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
     letter-spacing: 0.3px !important;
     transition: all 0.2s ease !important;
     width: 100%;
@@ -138,12 +170,13 @@ NETFLIX_CSS = """
 
 .stButton > button:hover {
     color: white !important;
-    background-color: rgba(255,255,255,0.08) !important;
+    background-color: rgba(255,255,255,0.06) !important;
 }
 
 div[data-testid="stHorizontalBlock"] button[kind="primary"] {
     background-color: transparent !important;
     color: white !important;
+    font-weight: 700 !important;
     border-bottom: 2px solid var(--netflix-red) !important;
     border-radius: 0 !important;
 }
@@ -185,7 +218,6 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
     color: rgba(255,255,255,0.85);
     max-width: 480px;
     line-height: 1.5;
-    margin-bottom: 0;
 }
 
 /* ---------- SECTION TITLES ---------- */
@@ -234,14 +266,21 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
     align-items: flex-start;
     border-left: 5px solid var(--netflix-red);
 }
-.motd-poster { width: 140px; min-width: 140px; height: 210px; object-fit: cover; border-radius: 8px; }
-.motd-label { font-size: 12px; color: var(--netflix-red); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+
+.motd-banner > div:first-child,
+.motd-banner > img:first-child {
+    width: 140px !important;
+    min-width: 140px !important;
+    max-width: 140px !important;
+    flex-shrink: 0;
+}
+
+.motd-poster { width: 140px; height: 210px; object-fit: cover; border-radius: 8px; display: block; }
+.motd-label { font-size: 12px; color: var(--netflix-red); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
 .motd-title { font-size: 28px; font-weight: 900; color: white; margin: 0 0 10px 0; }
 .motd-overview { font-size: 14px; color: var(--netflix-muted); line-height: 1.6; }
 
-/* ---------- GENRE GRID (photo-backed cards, per mockup) ---------- */
-.genre-grid-wrap { margin-top: 4px; }
-
+/* ---------- GENRE CARDS ---------- */
 .genre-card {
     position: relative;
     border-radius: 12px;
@@ -266,9 +305,7 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
 .genre-count { font-size: 12.5px; color: #e5e5e5; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
 .genre-count .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--netflix-red); display: inline-block; }
 
-/* ---------- SEARCH / RESULT CARDS (GRID) ---------- */
-.result-grid { margin-top: 4px; }
-
+/* ---------- RESULT CARDS ---------- */
 .result-card {
     position: relative;
     background: var(--netflix-card);
@@ -282,21 +319,16 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
 
 .result-poster-wrap { position: relative; }
 .result-poster { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #1a1a1a; display: block; }
-.result-heart {
-    position: absolute; bottom: 10px; right: 10px;
-}
 
 .result-body { padding: 14px 16px 16px; }
 .result-title { font-size: 15px; font-weight: 800; color: white; margin: 0 0 2px 0; line-height: 1.3; }
 .result-year { font-size: 12.5px; color: var(--netflix-muted); margin-bottom: 8px; }
 .result-meta { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; margin-bottom: 8px; flex-wrap: wrap; }
 .result-meta .rating { color: #f5c518; display: flex; align-items: center; gap: 3px; }
-.result-meta .match { color: var(--netflix-red); }
+.result-meta .match { color: var(--netflix-red); display: flex; align-items: center; gap: 3px; }
 .result-overview { font-size: 12.5px; color: var(--netflix-muted); line-height: 1.5; }
 
-/* ---------- WATCHLIST POSTER GRID (rating badge + remove X, per mockup) ---------- */
-.watch-grid { margin-top: 6px; }
-
+/* ---------- WATCHLIST CARDS ---------- */
 .watch-card {
     position: relative;
     border-radius: 10px;
@@ -352,19 +384,34 @@ div[data-testid="stHorizontalBlock"] button[kind="primary"] {
 .footer { text-align: center; padding: 40px 0 20px; color: #555; font-size: 12px; }
 
 /* ---------- RESPONSIVE ---------- */
+@media (max-width: 992px) {
+    .cinematch-logo { font-size: 26px; letter-spacing: -1.2px; }
+    .cinematch-logo-icon { font-size: 26px !important; }
+    .hero-title { font-size: 30px; }
+    .section-title { font-size: 19px; }
+}
+
 @media (max-width: 768px) {
-    .hero-title { font-size: 28px; }
+    .cinematch-logo { font-size: 22px; letter-spacing: -1px; }
+    .cinematch-logo-icon { font-size: 22px !important; }
+    .hero-title { font-size: 26px; }
     .hero-banner { padding: 32px 20px; min-height: 200px; }
     .motd-banner { flex-direction: column; }
-    .motd-poster { width: 100%; height: auto; max-height: 280px; }
+    .motd-banner > div:first-child,
+    .motd-banner > img:first-child,
+    .motd-poster { width: 100% !important; max-width: 280px !important; height: auto !important; }
     .shelf-card { flex: 0 0 130px; }
+    .header-icons { gap: 12px; }
 }
 
 @media (max-width: 480px) {
+    .cinematch-logo { font-size: 18px; }
+    .cinematch-logo-icon { font-size: 18px !important; }
     .stButton > button {
         padding: 6px 8px !important;
         font-size: 11px !important;
     }
+    .header-icons { gap: 8px; }
 }
 </style>
 """
@@ -375,13 +422,14 @@ st.markdown(NETFLIX_CSS, unsafe_allow_html=True)
 # ============================================================
 # HELPERS
 # ============================================================
-def make_poster_placeholder(title: str, height: str = "100%") -> str:
+def make_poster_placeholder(title: str, height: str = "100%", width: str = "100%") -> str:
     short = (title[:22] + "…") if len(title) > 22 else title
     return (
-        f'<div style="width:100%;height:{height};min-height:180px;'
+        f'<div style="width:{width};height:{height};min-width:140px;min-height:180px;'
         f'background:linear-gradient(135deg,#E50914,#7a0009);'
         f'display:flex;flex-direction:column;align-items:center;'
-        f'justify-content:center;color:white;text-align:center;padding:12px;">'
+        f'justify-content:center;color:white;text-align:center;padding:12px;'
+        f'border-radius:8px;flex-shrink:0;">'
         f'<span class="material-icons-round" style="font-size:36px;opacity:0.9;">movie</span>'
         f'<span style="margin-top:8px;font-size:12px;font-weight:700;line-height:1.2;">{short}</span>'
         f'</div>'
@@ -465,7 +513,6 @@ def fetch_poster_by_title(title: str, year: str = None):
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_genre_backdrop(genre_name: str):
-    """Grab a backdrop image representative of a genre, for the Browse cards."""
     if not TMDB_API_KEY:
         return None
     genre_id_map = {
@@ -632,18 +679,18 @@ def is_in_watchlist(movie_id):
 
 
 # ============================================================
-# HEADER + TOP NAV (logo · nav links · bell/profile icons)
+# HEADER + TOP NAV
 # ============================================================
 st.markdown(
     f"""
     <div class="cinematch-header">
         <div class="cinematch-logo-row">
-            {icon('movie_filter', 26)}
+            <span class="material-icons-round cinematch-logo-icon">movie_filter</span>
             <div class="cinematch-logo">CINEMATCH</div>
         </div>
         <div class="header-icons">
-            {icon('notifications_none', 22, '#e5e5e5')}
-            {icon('account_circle', 24, '#e5e5e5')}
+            {icon('notifications_none', 24, '#e5e5e5')}
+            {icon('account_circle', 26, '#e5e5e5')}
             {icon('expand_more', 18, '#e5e5e5')}
         </div>
     </div>
@@ -722,7 +769,7 @@ def render_movie_result_card(row, show_similarity=True):
 
     match_html = ""
     if show_similarity and sim_val is not None:
-        pct = int(sim_val * 100)
+        pct = min(99, int(sim_val * 250))
         match_html = f'<span class="match">{icon("bolt", 13, "#E50914")} {pct}% Match</span>'
 
     st.markdown(
@@ -785,7 +832,7 @@ def render_home():
             poster = poster or fetch_poster_by_title(motd["title"])
         poster_html = (
             f'<img class="motd-poster" src="{poster}" alt="poster">'
-            if poster else make_poster_placeholder(motd["title"], "210px")
+            if poster else make_poster_placeholder(motd["title"], "210px", "140px")
         )
         rating = motd.get("vote_average", 0)
         st.markdown(
@@ -827,7 +874,7 @@ def render_home():
 
 
 # ============================================================
-# PAGE: BROWSE  (photo-backed genre cards with icon badge, per mockup)
+# PAGE: BROWSE
 # ============================================================
 def render_browse():
     if st.session_state.selected_genre:
@@ -972,7 +1019,7 @@ def render_search():
 
 
 # ============================================================
-# PAGE: WATCHLIST  (rating badge + remove-X overlay, per mockup)
+# PAGE: WATCHLIST
 # ============================================================
 def render_watchlist():
     st.markdown(f'<div class="section-title">{icon("favorite", 22)} My Watchlist</div>', unsafe_allow_html=True)
@@ -1018,7 +1065,7 @@ def render_watchlist():
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button("✕ Remove", key=f"rm_{m['id']}", use_container_width=True):
+            if st.button("Remove", key=f"rm_{m['id']}", use_container_width=True):
                 remove_from_watchlist(m["id"])
                 st.rerun()
 
