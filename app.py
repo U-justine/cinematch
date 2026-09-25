@@ -219,7 +219,7 @@ NETFLIX_CSS = """
     background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
     border-left: 5px solid var(--netflix-red);
     border-radius: 10px; padding: 22px 20px;
-    cursor: pointer; transition: all 0.25s ease;
+    transition: all 0.25s ease;
     display: flex; align-items: center; gap: 14px;
     min-height: 90px;
 }
@@ -272,7 +272,7 @@ st.markdown(NETFLIX_CSS, unsafe_allow_html=True)
 
 
 # ============================================================
-# ICON HELPER
+# HELPERS
 # ============================================================
 def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
     return (
@@ -283,17 +283,17 @@ def icon(name: str, size: int = 22, color: str = "#E50914") -> str:
 
 def make_poster_placeholder(title: str) -> str:
     short = title[:28] + ("..." if len(title) > 28 else "")
-    return f"""
-    <div class="movie-poster" style="
-        background: linear-gradient(135deg, #E50914 0%, #7a0009 100%);
-        flex-direction: column; text-align: center; padding: 8px;
-        color: #FFFFFF;">
-        <span class="material-icons-round"
-              style="font-size:34px;color:#FFFFFF;opacity:0.92;">movie</span>
-        <span style="margin-top:6px;font-size:11px;font-weight:700;
-                     line-height:1.2;opacity:0.95;">{short}</span>
-    </div>
-    """
+    return (
+        '<div class="movie-poster" style="'
+        'background: linear-gradient(135deg, #E50914 0%, #7a0009 100%);'
+        'flex-direction: column; text-align: center; padding: 8px;'
+        'color: #FFFFFF;">'
+        '<span class="material-icons-round" '
+        'style="font-size:34px;color:#FFFFFF;opacity:0.92;">movie</span>'
+        f'<span style="margin-top:6px;font-size:11px;font-weight:700;'
+        f'line-height:1.2;opacity:0.95;">{short}</span>'
+        '</div>'
+    )
 
 
 # ============================================================
@@ -487,29 +487,10 @@ GENRE_ICONS = {
     "Western": "landscape",
 }
 
-# Friendly display labels
 GENRE_LABELS = {
     "Science Fiction": "Sci-Fi",
-    "Documentary": "Documentary",
-    "Animation": "Animation",
-    "Adventure": "Adventure",
-    "Action": "Action",
-    "Comedy": "Comedy",
-    "Drama": "Drama",
-    "Horror": "Horror",
-    "Romance": "Romance",
-    "Thriller": "Thriller",
-    "Fantasy": "Fantasy",
-    "Mystery": "Mystery",
-    "Crime": "Crime",
-    "Family": "Family",
-    "History": "History",
-    "Music": "Music",
-    "War": "War",
-    "Western": "Western",
 }
 
-# Order matters — these are the ones shown as tiles
 BROWSE_GENRES = [
     "Action", "Adventure", "Animation", "Comedy",
     "Crime", "Documentary", "Drama", "Family",
@@ -520,7 +501,6 @@ BROWSE_GENRES = [
 
 
 def get_genre_movies(df, genre_name, n=20):
-    """Return top-rated movies in a genre."""
     genre_key = genre_name.lower()
     mask = df["genres"].str.contains(genre_key, na=False)
     filtered = df[mask].copy()
@@ -535,7 +515,6 @@ def count_genre_movies(df, genre_name):
 
 
 def get_all_genres(df) -> list:
-    """Legacy: used by search filter chips."""
     return BROWSE_GENRES
 
 
@@ -607,7 +586,6 @@ with nav_col4:
 # LOAD ENGINE
 # ============================================================
 df, sim = build_engine()
-ALL_GENRES = get_all_genres(df)
 
 
 # ============================================================
@@ -772,7 +750,6 @@ def render_home():
         else:
             st.info("Trending unavailable. Try again later.")
 
-    # Quick action
     st.markdown(
         f"""
         <div class="section-title">{icon('explore', 24)} Or Explore by Genre</div>
@@ -785,13 +762,12 @@ def render_home():
 
 
 # ============================================================
-# PAGE: BROWSE BY GENRE
+# PAGE: BROWSE
 # ============================================================
 def render_browse():
-    # If a genre has been selected — show its movies
     if st.session_state.selected_genre:
         genre = st.session_state.selected_genre
-        if st.button("← BACK TO ALL GENRES", use_container_width=False, key="back_genres"):
+        if st.button("BACK TO ALL GENRES", use_container_width=False, key="back_genres"):
             st.session_state.selected_genre = None
             st.rerun()
 
@@ -814,7 +790,7 @@ def render_browse():
                 render_movie_card(row, show_heart=True, show_similarity=False)
         return
 
-    # Otherwise — show genre tiles
+    # Genre grid
     st.markdown(
         f"""
         <div class="hero-banner" style="padding:35px 24px;">
@@ -828,7 +804,6 @@ def render_browse():
         unsafe_allow_html=True,
     )
 
-    # Render tiles in a grid of columns
     cols_per_row = 3
     for i in range(0, len(BROWSE_GENRES), cols_per_row):
         cols = st.columns(cols_per_row)
@@ -838,7 +813,6 @@ def render_browse():
                 label = GENRE_LABELS.get(genre, genre)
                 icon_name = GENRE_ICONS.get(genre, "movie")
 
-                # Tile as HTML (visual)
                 st.markdown(
                     f"""
                     <div class="genre-tile">
@@ -851,6 +825,187 @@ def render_browse():
                     """,
                     unsafe_allow_html=True,
                 )
-                # Real clickable button below
                 if st.button(
-                    f"OPEN {label.upper
+                    f"OPEN {label.upper()}",
+                    key=f"genre_{genre}",
+                    use_container_width=True,
+                ):
+                    st.session_state.selected_genre = genre
+                    st.rerun()
+
+
+# ============================================================
+# PAGE: SEARCH
+# ============================================================
+def render_search():
+    st.markdown(
+        f"""
+        <div class="section-title">{icon('search', 24)} Search Movies</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.session_state.history:
+        hist_html = " &nbsp;•&nbsp; ".join(st.session_state.history)
+        st.markdown(
+            f"""
+            <div class="history-bar">
+                {icon('history', 16, '#B3B3B3')} Recent: {hist_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        query = st.text_input(
+            "Search",
+            placeholder="Try: The Dark Knight, Avatar, Inception...",
+            label_visibility="collapsed",
+            key="search_query",
+        )
+    with col2:
+        n_results = st.selectbox(
+            "Show", [5, 10, 15, 20], index=1,
+            label_visibility="collapsed", key="search_n",
+        )
+
+    st.markdown(
+        f"""
+        <div style="color:#B3B3B3;font-size:13px;margin:14px 0 6px 0;">
+            {icon('tune', 16, '#B3B3B3')} Filter by genre (optional)
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    selected_genres = st.multiselect(
+        "Genres",
+        options=BROWSE_GENRES,
+        default=st.session_state.genre_filter,
+        label_visibility="collapsed",
+    )
+    st.session_state.genre_filter = selected_genres
+
+    if query and len(query) > 1:
+        suggestions = search_titles(df, query)
+        if suggestions:
+            sugg_html = (
+                f" {icon('lightbulb', 16, '#B3B3B3')} Suggestions: "
+                + " &nbsp;•&nbsp; ".join(suggestions)
+            )
+            st.markdown(
+                f'<div style="color:#B3B3B3;font-size:13px;margin-top:-8px;">'
+                f"{sugg_html}</div>",
+                unsafe_allow_html=True,
+            )
+
+    if st.button("FIND MY MATCH", use_container_width=True, key="search_btn"):
+        if not query:
+            st.warning("Please enter a movie title.")
+        else:
+            clean_q = query.strip().title()
+            if clean_q not in st.session_state.history:
+                st.session_state.history.insert(0, clean_q)
+                st.session_state.history = st.session_state.history[:5]
+
+            with st.spinner("Finding your matches..."):
+                results = recommend(
+                    df, sim, query, n=n_results,
+                    genre_filter=selected_genres,
+                )
+
+            if results.empty:
+                st.error(f"No movies found matching “{query}”. Try another title.")
+            else:
+                st.markdown(
+                    f"""
+                    <div class="section-title">
+                        {icon('auto_awesome', 24)}
+                        Because you liked “{query.title()}”
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                for _, row in results.iterrows():
+                    render_movie_card(row)
+
+
+# ============================================================
+# PAGE: WATCHLIST
+# ============================================================
+def render_watchlist():
+    st.markdown(
+        f"""
+        <div class="section-title">{icon('favorite', 24)} My Watchlist</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if not st.session_state.watchlist:
+        st.markdown(
+            f"""
+            <div style="padding:30px;border-radius:8px;background:#1a1a1a;
+                        border-left:4px solid #E50914;color:#B3B3B3;
+                        text-align:center;">
+                {icon('movie_filter', 48, '#564d4d')}
+                <p style="margin-top:14px;font-size:15px;">
+                    Your watchlist is empty. Search for movies and tap
+                    ADD TO WATCHLIST to save them here.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    for m in st.session_state.watchlist:
+        poster = m.get("poster")
+        poster_html = (
+            f'<img class="movie-poster" src="{poster}" alt="poster">'
+            if poster
+            else make_poster_placeholder(m["title"])
+        )
+        st.markdown(
+            f"""
+            <div class="movie-card">
+                {poster_html}
+                <div class="movie-content">
+                    <div class="movie-title">{icon('movie', 20)} {m['title']}</div>
+                    <div class="movie-meta">
+                        <span>{icon('star', 15)} {m.get('rating') or 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("REMOVE FROM WATCHLIST", key=f"remove_{m['id']}"):
+            remove_from_watchlist(m["id"])
+            st.rerun()
+
+
+# ============================================================
+# ROUTER
+# ============================================================
+if st.session_state.page == "home":
+    render_home()
+elif st.session_state.page == "browse":
+    render_browse()
+elif st.session_state.page == "search":
+    render_search()
+elif st.session_state.page == "watchlist":
+    render_watchlist()
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+st.markdown(
+    f"""
+    <div class="footer">
+        CINEMATCH &nbsp;•&nbsp; Powered by NLP & TF-IDF &nbsp;•&nbsp;
+        Built with {icon('favorite', 14)} at TekHer AI Bootcamp
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
