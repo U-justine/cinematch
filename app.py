@@ -1,18 +1,13 @@
 """
 CineMatch — Netflix-style movie recommender
-Streamlit Cloud-ready with TMDb API integration.
+Streamlit Cloud-ready with TDb API integration.
 Pages: Home, Browse, Search, Watchlist, Collections, Profile.
-Built to match the reference mockups pixel-for-pixel:
-  - Sidebar nav              -> "My Watchlist" mockup
-  - Genre grid (Browse)      -> "Browse by Genre" mockup
-  - Search results grid      -> "Because you liked..." mockup
-Everything — HTML, CSS, and logic — lives in this single file.
-No external stylesheet or template is required.
 """
 
 import ast
 import datetime
 import random
+import textwrap
 import requests
 import pandas as pd
 import streamlit as st
@@ -25,7 +20,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # ============================================================
 st.set_page_config(
     page_title="CineMatch — Your Next Favorite Film",
-    page_icon="🎬",
+    page_icon=":movie_camera:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -47,14 +42,17 @@ for key, default in {
 
 
 # ============================================================
-# STYLESHEET (everything lives in this one file — no external CSS)
+# RENDER HELPER — strips indentation before passing to st.html()
 # ============================================================
-APP_CSS = """
-/* ============================================================
-   CINEMATCH — stylesheet
-   Loaded once by app.py via st.html(APP_CSS wrapped in a <style> tag)
-   ============================================================ */
+def render_html(markup: str):
+    """Render HTML reliably by stripping all leading whitespace."""
+    st.html(textwrap.dedent(markup).strip())
 
+
+# ============================================================
+# CSS — loaded as one block
+# ============================================================
+CSS = """
 :root {
     --red: #E50914;
     --red-hover: #F40612;
@@ -65,78 +63,45 @@ APP_CSS = """
     --border: #2a2a2a;
     --white: #FFFFFF;
     --muted: #9a9a9a;
-    --muted-2: #7a7a7a;
     --gold: #f5c518;
 }
-
 html, body, .stApp {
     background-color: var(--black) !important;
     color: var(--white);
     font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
 }
-
 #MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; height: 0; }
 [data-testid="stToolbar"] { display: none; }
-
 .block-container {
     padding-top: 1.6rem !important;
     padding-bottom: 3rem !important;
     max-width: 1280px !important;
 }
 
-/* ============================================================
-   SIDEBAR NAVIGATION (matches "My Watchlist" mockup)
-   ============================================================ */
+/* Sidebar */
 section[data-testid="stSidebar"] {
     background-color: var(--panel) !important;
     border-right: 1px solid var(--border);
     min-width: 250px !important;
 }
-
-section[data-testid="stSidebar"] > div {
-    padding-top: 1.4rem;
-}
-
-[data-testid="stSidebarUserContent"] {
-    display: flex;
-    flex-direction: column;
-    min-height: 92vh;
-}
-
+section[data-testid="stSidebar"] > div { padding-top: 1.4rem; }
 .sidebar-logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 4px 20px 4px;
-    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 4px 20px 4px; margin-bottom: 8px;
     border-bottom: 1px solid var(--border);
 }
-
 .sidebar-logo-icon {
-    width: 34px; height: 34px;
-    background: var(--red);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    width: 34px; height: 34px; background: var(--red);
+    border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0;
 }
-
-.sidebar-logo-text {
-    font-size: 20px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-}
+.sidebar-logo-text { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
 .sidebar-logo-text .cine { color: var(--white); }
 .sidebar-logo-text .match { color: var(--red); }
-
-.sidebar-spacer { flex: 1 1 auto; }
-
 .sidebar-divider {
-    border: none;
-    border-top: 1px solid var(--border);
+    border: none; border-top: 1px solid var(--border);
     margin: 10px 4px 10px 4px;
 }
-
-/* Sidebar nav buttons */
 section[data-testid="stSidebar"] .stButton > button {
     background-color: transparent !important;
     border: none !important;
@@ -147,14 +112,9 @@ section[data-testid="stSidebar"] .stButton > button {
     padding: 10px 12px !important;
     font-size: 14.5px !important;
     font-weight: 600 !important;
-    width: 100%;
-    display: flex !important;
-    gap: 12px;
-    box-shadow: none !important;
+    width: 100%; box-shadow: none !important;
 }
-section[data-testid="stSidebar"] .stButton > button p {
-    text-align: left !important;
-}
+section[data-testid="stSidebar"] .stButton > button p { text-align: left !important; }
 section[data-testid="stSidebar"] .stButton > button:hover {
     background-color: rgba(255,255,255,0.06) !important;
     color: white !important;
@@ -166,119 +126,67 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     border-radius: 6px !important;
 }
 
-/* ============================================================
-   ICON HELPERS
-   ============================================================ */
-.mi { vertical-align: middle; }
-
-/* ============================================================
-   PAGE HEADER ROWS
-   ============================================================ */
+/* Page titles */
+.page-title { font-size: 34px; font-weight: 900; margin: 0; letter-spacing: -0.5px; }
+.page-subtitle { color: var(--muted); font-size: 14.5px; margin: 6px 0 26px 0; }
 .page-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 4px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px; margin-bottom: 4px;
 }
 .page-title-row { display: flex; align-items: center; gap: 12px; }
-.page-title {
-    font-size: 34px;
-    font-weight: 900;
-    margin: 0;
-    letter-spacing: -0.5px;
-}
-.page-subtitle {
-    color: var(--muted);
-    font-size: 14.5px;
-    margin: 6px 0 26px 0;
-}
-.page-actions { display: flex; align-items: center; gap: 10px; }
-
-/* ============================================================
-   HERO (Browse / generic)
-   ============================================================ */
 .hero-title { font-size: 34px; font-weight: 900; margin: 0 0 6px 0; letter-spacing: -0.5px; }
 .hero-subtitle { color: var(--muted); font-size: 14.5px; margin-bottom: 26px; }
 
-/* ============================================================
-   GENRE GRID — matches "Browse by Genre" mockup exactly:
-   photo card, 2px red border, plain white outline icon top-left,
-   bold name, small red dot + count
-   ============================================================ */
+/* Genre cards */
 .genre-card {
-    position: relative;
-    height: 168px;
-    border-radius: 10px;
-    border: 2px solid var(--red);
-    overflow: hidden;
-    background-size: cover;
-    background-position: center;
-    margin-bottom: 14px;
-    transition: transform 0.2s ease;
+    position: relative; height: 168px; border-radius: 10px;
+    border: 2px solid var(--red); overflow: hidden;
+    background-size: cover; background-position: center;
+    margin-bottom: 14px; transition: transform 0.2s ease;
 }
 .genre-card:hover { transform: translateY(-3px); }
-
 .genre-scrim {
     position: absolute; inset: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.92) 15%, rgba(0,0,0,0.15) 60%, rgba(0,0,0,0.05) 100%);
+    background: linear-gradient(to top,
+        rgba(0,0,0,0.92) 15%,
+        rgba(0,0,0,0.15) 60%,
+        rgba(0,0,0,0.05) 100%);
     display: flex; flex-direction: column; justify-content: space-between;
     padding: 14px 16px;
 }
-.genre-icon { color: #fff; opacity: 0.95; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6)); }
+.genre-icon { color: #fff; opacity: 0.95; }
 .genre-name { font-size: 20px; font-weight: 800; color: white; margin: 0; }
-.genre-count { font-size: 13px; color: #e0e0e0; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
-.genre-count .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); display: inline-block; }
-
-/* Make the "Open <genre>" trigger button invisible but clickable, overlaying the card */
-div[data-testid="column"] .stButton > button[kind="secondary"].genre-btn,
-div[data-testid="column"] .stButton > button {
-    margin-top: -6px;
+.genre-count {
+    font-size: 13px; color: #e0e0e0; margin-top: 4px;
+    display: flex; align-items: center; gap: 6px;
+}
+.genre-count .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--red); display: inline-block;
 }
 
-/* ============================================================
-   SEARCH BAR — matches "Because you liked..." mockup
-   ============================================================ */
-.search-bar-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 4px 4px 4px 16px;
-    margin-bottom: 26px;
-}
-.search-bar-icon { color: var(--muted); flex-shrink: 0; }
-
+/* Search input */
 .stTextInput > div > div > input {
-    background-color: transparent !important;
-    border: none !important;
+    background-color: #1a1a1a !important;
+    border: 1px solid #333 !important;
     color: white !important;
+    border-radius: 6px !important;
+    padding: 14px 16px !important;
     font-size: 15px !important;
-    padding: 12px 0 !important;
 }
-.stTextInput > div > div { border: none !important; background: transparent !important; }
-.stTextInput > div { border: none !important; }
-
-.results-heading {
-    font-size: 26px;
-    font-weight: 800;
-    margin: 6px 0 22px 0;
+.stTextInput > div > div > input:focus {
+    border-color: var(--red) !important;
+    box-shadow: 0 0 0 2px rgba(229,9,20,0.3) !important;
 }
-.results-heading em {
-    color: var(--red);
-    font-style: italic;
-    border-bottom: 2px solid var(--red);
-    padding-bottom: 2px;
+.stSelectbox > div > div, .stMultiSelect > div > div {
+    background-color: #1a1a1a !important;
+    border: 1px solid #333 !important;
+    border-radius: 6px !important;
+    color: white !important;
 }
 
-/* ============================================================
-   RESULT CARDS — poster top, body below, heart bottom-right
-   ============================================================ */
+/* Result cards */
 .result-card {
-    position: relative;
     background: var(--card);
     border: 2px solid var(--red);
     border-radius: 10px;
@@ -286,172 +194,132 @@ div[data-testid="column"] .stButton > button {
     margin-bottom: 14px;
 }
 .result-poster {
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    object-fit: cover;
-    display: block;
-    background: #111;
+    width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+    display: block; background: #111;
 }
-.result-body { padding: 14px 16px 46px 16px; position: relative; min-height: 128px; }
-.result-title { font-size: 15.5px; font-weight: 800; color: white; margin: 0 0 2px 0; line-height: 1.25; }
+.result-body { padding: 14px 16px; min-height: 120px; }
+.result-title { font-size: 15.5px; font-weight: 800; color: white; margin: 0 0 2px 0; }
 .result-year { color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
-.result-meta { display: flex; align-items: center; gap: 10px; font-size: 12.5px; font-weight: 700; margin-bottom: 8px; }
-.result-meta .rating { color: var(--gold); display: flex; align-items: center; gap: 3px; }
+.result-meta {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px; font-weight: 700; margin-bottom: 8px;
+}
+.result-meta .rating { color: var(--gold); }
 .result-meta .match { color: var(--red); }
 .result-overview { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.result-heart {
-    position: absolute; bottom: 12px; right: 14px;
-    width: 30px; height: 30px; border-radius: 50%;
-    border: 1.5px solid #555;
-    display: flex; align-items: center; justify-content: center;
-}
-.result-heart.active { border-color: var(--red); background: rgba(229,9,20,0.12); }
 
-/* ============================================================
-   WATCHLIST — badge top-left, remove-X top-right, per mockup
-   ============================================================ */
-.watch-toolbar {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-}
+/* Watchlist */
 .watch-count { color: var(--muted); font-size: 14px; margin: 4px 0 24px 0; }
-
-.watch-card { margin-bottom: 6px; }
-.watch-poster-wrap { position: relative; border-radius: 10px; overflow: hidden; }
-.watch-poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; background: #111; }
-
+.watch-poster {
+    width: 100%; aspect-ratio: 2 / 3; object-fit: cover;
+    display: block; background: #111; border-radius: 10px;
+}
+.watch-title { font-size: 14px; font-weight: 800; color: white; margin: 10px 0 2px 0; }
+.watch-year { font-size: 12px; color: var(--muted); }
 .watch-rating-badge {
     position: absolute; top: 8px; left: 8px;
-    background: rgba(20,20,20,0.9);
-    border-radius: 5px;
-    padding: 3px 7px;
-    font-size: 12px; font-weight: 800; color: var(--gold);
-    display: flex; align-items: center; gap: 3px;
+    background: rgba(20,20,20,0.9); border-radius: 5px;
+    padding: 3px 7px; font-size: 12px; font-weight: 800;
+    color: var(--gold);
 }
-
 .watch-remove-badge {
     position: absolute; top: 8px; right: 8px;
     width: 24px; height: 24px; border-radius: 50%;
     background: var(--red);
     display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 900; font-size: 12px;
 }
+.watch-poster-wrap { position: relative; }
 
-.watch-title { font-size: 14px; font-weight: 800; color: white; margin: 10px 0 2px 0; }
-.watch-year { font-size: 12px; color: var(--muted); }
-
-/* ============================================================
-   BUTTONS (default streamlit buttons in main content)
-   ============================================================ */
-div.main .stButton > button {
-    background-color: var(--card-2) !important;
-    color: #e5e5e5 !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 6px !important;
-    font-weight: 600 !important;
-    font-size: 13px !important;
-}
-div.main .stButton > button:hover {
-    border-color: var(--red) !important;
-    color: var(--red) !important;
-}
-div.main .stButton > button[kind="primary"] {
-    background-color: var(--red) !important;
-    color: white !important;
-    border: none !important;
-}
-div.main .stButton > button[kind="primary"]:hover { background-color: var(--red-hover) !important; }
-
-.btn-outline-red button {
-    border: 1.5px solid var(--red) !important;
-    color: var(--red) !important;
-    background: transparent !important;
-}
-
-/* ============================================================
-   SELECTS / MULTISELECT
-   ============================================================ */
-.stSelectbox > div > div, .stMultiSelect > div > div {
-    background-color: var(--card) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 6px !important;
-    color: white !important;
-}
-
-/* ============================================================
-   EMPTY STATE
-   ============================================================ */
+/* Empty state */
 .empty-state {
-    padding: 56px 24px; border-radius: 12px; background: var(--card);
-    border: 1px solid var(--border); text-align: center; color: var(--muted);
+    padding: 56px 24px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--border);
+    text-align: center; color: var(--muted);
 }
 
-/* ============================================================
-   HOME
-   ============================================================ */
+/* Home hero */
 .home-hero {
     background: linear-gradient(135deg, #1a0505 0%, #2a0a0a 45%, #0f0f0f 100%);
-    border-radius: 12px;
-    padding: 46px 40px;
-    margin-bottom: 30px;
-    min-height: 200px;
-    display: flex; flex-direction: column; justify-content: center;
+    border-radius: 12px; padding: 46px 40px; margin-bottom: 30px;
+    min-height: 200px; display: flex; flex-direction: column; justify-content: center;
 }
-.home-hero-label { color: var(--red); font-weight: 700; font-size: 12.5px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+.home-hero-label {
+    color: var(--red); font-weight: 700; font-size: 12.5px;
+    letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;
+}
 .home-hero-title { font-size: 38px; font-weight: 900; margin: 0 0 10px 0; letter-spacing: -0.5px; }
 .home-hero-sub { color: #d5d5d5; font-size: 15px; max-width: 480px; line-height: 1.5; }
-
-.section-title { font-size: 21px; font-weight: 800; margin: 30px 0 14px 0; display: flex; align-items: center; gap: 9px; }
-
+.section-title {
+    font-size: 21px; font-weight: 800; margin: 30px 0 14px 0;
+    display: flex; align-items: center; gap: 9px;
+}
 .shelf { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; }
-.shelf::-webkit-scrollbar { height: 6px; }
-.shelf::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
 .shelf-card { flex: 0 0 155px; background: var(--card); border-radius: 8px; overflow: hidden; }
-.shelf-poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; background: #111; }
+.shelf-poster { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: #111; }
 .shelf-info { padding: 9px 11px 12px; }
-.shelf-title { font-size: 12.5px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
-.shelf-meta { font-size: 11.5px; color: var(--gold); font-weight: 700; display: flex; align-items: center; gap: 4px; }
-
+.shelf-title {
+    font-size: 12.5px; font-weight: 700; color: white;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 3px;
+}
+.shelf-meta { font-size: 11.5px; color: var(--gold); font-weight: 700; }
 .motd-banner {
-    background: var(--card); border-radius: 12px; padding: 26px; margin-bottom: 10px;
-    display: flex; gap: 24px; border-left: 4px solid var(--red);
+    background: var(--card); border-radius: 12px; padding: 26px;
+    margin-bottom: 10px; display: flex; gap: 24px;
+    border-left: 4px solid var(--red);
 }
 .motd-poster { width: 130px; min-width: 130px; height: 195px; object-fit: cover; border-radius: 8px; }
-.motd-label { color: var(--red); font-weight: 800; font-size: 11.5px; letter-spacing: 1.3px; text-transform: uppercase; margin-bottom: 6px; }
+.motd-label {
+    color: var(--red); font-weight: 800; font-size: 11.5px;
+    letter-spacing: 1.3px; text-transform: uppercase; margin-bottom: 6px;
+}
 .motd-title { font-size: 24px; font-weight: 900; margin: 0 0 8px 0; }
 .motd-overview { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
 
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
-@media (max-width: 480px) {
-    .page-title, .hero-title { font-size: 24px; }
+/* Buttons */
+.stButton > button {
+    background-color: var(--red) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 6px !important;
+    padding: 10px 18px !important;
+    font-weight: 700 !important;
+    font-size: 13.5px !important;
+    width: 100%;
 }
+.stButton > button:hover { background-color: var(--red-hover) !important; }
 
+/* Responsive */
+@media (max-width: 768px) {
+    .hero-title, .page-title { font-size: 26px; }
+    .home-hero { padding: 32px 20px; }
+    .home-hero-title { font-size: 28px; }
+    .motd-banner { flex-direction: column; }
+    .motd-poster { width: 100%; max-width: 260px; height: auto; }
+    .shelf-card { flex: 0 0 130px; }
+    .genre-card { height: 140px; }
+}
 """
 
-st.html(f"""
+render_html(f"""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>{APP_CSS}</style>
+<style>{CSS}</style>
 """)
 
 
 # ============================================================
-# ICON HELPERS — inline SVG icons (true vector line-icons).
-# Not a web font (which can fail to load and show raw text like
-# "movie_filter"), and not emoji (which render as colorful
-# platform pictures instead of clean icons). Every icon below is
-# self-contained SVG markup styled with currentColor, so it always
-# renders identically everywhere with zero external dependency.
+# INLINE SVG ICONS
 # ============================================================
 ICON_PATHS = {
-    "home": '<path d="M3 12l9-9 9 9"/><path d="M9 21V9h6v12"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/>',
+    "home": '<path d="M3 12l9-9 9 9"/><path d="M9 21V9h6v12"/>',
     "search": '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/>',
     "favorite": '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
     "video_library": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
     "person": '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     "logout": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
-    "movie": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="2" y1="9" x2="7" y2="9"/><line x1="2" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="22" y2="9"/><line x1="17" y1="15" x2="22" y2="15"/>',
-    "movie_filter": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="2" y1="9" x2="7" y2="9"/><line x1="2" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="22" y2="9"/><line x1="17" y1="15" x2="22" y2="15"/>',
-    "theaters": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="2" y1="9" x2="7" y2="9"/><line x1="2" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="22" y2="9"/><line x1="17" y1="15" x2="22" y2="15"/>',
+    "movie": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/>',
+    "theaters": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/>',
     "star": '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     "close": '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     "today": '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
@@ -461,18 +329,15 @@ ICON_PATHS = {
     "history": '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     "lightbulb": '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.5.4.9 1.1.9 1.8V17a1 1 0 0 0 1 1h4.2a1 1 0 0 0 1-1v-.5c0-.7.4-1.4.9-1.8A7 7 0 0 0 12 2z"/>',
     "bolt": '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
-    "rocket_launch": '<path d="M12 2c2.2 2 3.3 5.2 3.3 8.3 0 2.2-.5 3.8-1.1 5.4l-2.2 5.3-2.2-5.3c-.6-1.6-1.1-3.2-1.1-5.4C8.7 7.2 9.8 4 12 2z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8.2 16.2l-2.7 2.7M15.8 16.2l2.7 2.7"/>',
+    "rocket_launch": '<path d="M12 2c2.2 2 3.3 5.2 3.3 8.3 0 2.2-.5 3.8-1.1 5.4l-2.2 5.3-2.2-5.3c-.6-1.6-1.1-3.2-1.1-5.4C8.7 7.2 9.8 4 12 2z"/><circle cx="12" cy="9.5" r="1.6"/>',
     "dark_mode": '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
     "theater_comedy": '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>',
     "masks": '<circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>',
     "fingerprint": '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     "camera_alt": '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
-    "tune": '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
 }
 
-# Icons that read correctly as solid shapes (rating stars, hearts, sparkles,
-# bolts) are filled; every other icon stays an outlined line-icon.
 FILLED_ICONS = {"star", "favorite", "bolt", "auto_awesome"}
 
 
@@ -481,7 +346,10 @@ def icon(name: str, size: int = 20, color: str = "currentColor") -> str:
     if name in FILLED_ICONS:
         style = f'fill="{color}" stroke="none"'
     else:
-        style = f'fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+        style = (
+            f'fill="none" stroke="{color}" stroke-width="1.8" '
+            f'stroke-linecap="round" stroke-linejoin="round"'
+        )
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
         f'viewBox="0 0 24 24" {style} '
@@ -508,10 +376,12 @@ TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w780"
 def fetch_trending_movies(limit: int = 12):
     if not TMDB_API_KEY:
         return []
-    url = "https://api.themoviedb.org/3/trending/movie/week"
-    params = {"api_key": TMDB_API_KEY, "language": "en-US"}
     try:
-        r = requests.get(url, params=params, timeout=10)
+        r = requests.get(
+            "https://api.themoviedb.org/3/trending/movie/week",
+            params={"api_key": TMDB_API_KEY, "language": "en-US"},
+            timeout=10,
+        )
         r.raise_for_status()
         results = r.json().get("results", [])[:limit]
         return [
@@ -531,30 +401,32 @@ def fetch_trending_movies(limit: int = 12):
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_poster_by_id(movie_id):
     if not TMDB_API_KEY or not movie_id:
-        return None, None
-    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
-    params = {"api_key": TMDB_API_KEY, "language": "en-US"}
+        return None
     try:
-        r = requests.get(url, params=params, timeout=8)
+        r = requests.get(
+            f"https://api.themoviedb.org/3/movie/{movie_id}",
+            params={"api_key": TMDB_API_KEY, "language": "en-US"},
+            timeout=8,
+        )
         r.raise_for_status()
         data = r.json()
-        poster = f"{TMDB_IMG_BASE}{data['poster_path']}" if data.get("poster_path") else None
-        backdrop = f"{TMDB_BACKDROP_BASE}{data['backdrop_path']}" if data.get("backdrop_path") else None
-        return poster, backdrop
+        if data.get("poster_path"):
+            return f"{TMDB_IMG_BASE}{data['poster_path']}"
     except Exception:
-        return None, None
+        pass
+    return None
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_poster_by_title(title: str, year: str = None):
+def fetch_poster_by_title(title: str):
     if not TMDB_API_KEY:
         return None
-    url = "https://api.themoviedb.org/3/search/movie"
-    params = {"api_key": TMDB_API_KEY, "query": title, "language": "en-US"}
-    if year:
-        params["year"] = year
     try:
-        r = requests.get(url, params=params, timeout=8)
+        r = requests.get(
+            "https://api.themoviedb.org/3/search/movie",
+            params={"api_key": TMDB_API_KEY, "query": title, "language": "en-US"},
+            timeout=8,
+        )
         r.raise_for_status()
         results = r.json().get("results", [])
         if results and results[0].get("poster_path"):
@@ -575,16 +447,17 @@ GENRE_ID_MAP = {
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_genre_backdrop(genre_name: str):
-    """Representative backdrop image for a genre, used on the Browse cards."""
     if not TMDB_API_KEY:
         return None
     gid = GENRE_ID_MAP.get(genre_name)
     if not gid:
         return None
-    url = "https://api.themoviedb.org/3/discover/movie"
-    params = {"api_key": TMDB_API_KEY, "with_genres": gid, "sort_by": "popularity.desc"}
     try:
-        r = requests.get(url, params=params, timeout=8)
+        r = requests.get(
+            "https://api.themoviedb.org/3/discover/movie",
+            params={"api_key": TMDB_API_KEY, "with_genres": gid, "sort_by": "popularity.desc"},
+            timeout=8,
+        )
         r.raise_for_status()
         results = r.json().get("results", [])
         if results and results[0].get("backdrop_path"):
@@ -594,8 +467,7 @@ def fetch_genre_backdrop(genre_name: str):
     return None
 
 
-def poster_placeholder_style(seed_text: str) -> str:
-    """Deterministic dark gradient fallback so cards never look broken without an API key."""
+def placeholder_bg(seed_text: str) -> str:
     palettes = [
         "#3a0a0a,#120202", "#0a1a3a,#020712", "#1a0a3a,#070212",
         "#0a3a1a,#021207", "#3a1a0a,#120702",
@@ -687,7 +559,7 @@ def search_titles(df, query, limit=5):
 
 
 # ============================================================
-# GENRE CONFIG (icons + order match the "Browse by Genre" mockup)
+# GENRE CONFIG
 # ============================================================
 GENRE_ICONS = {
     "Action": "bolt",
@@ -698,20 +570,17 @@ GENRE_ICONS = {
     "Drama": "masks",
     "Thriller": "fingerprint",
     "Fantasy": "auto_awesome",
-    "Animation": "movie_filter",
+    "Animation": "movie",
     "Adventure": "explore",
     "Crime": "shield",
     "Documentary": "camera_alt",
 }
-
 GENRE_LABELS = {"Science Fiction": "Sci-Fi"}
-
 BROWSE_GENRES = list(GENRE_ICONS.keys())
 
 
 def get_genre_movies(df, genre_name, n=20):
-    genre_key = genre_name.lower()
-    mask = df["genres"].str.contains(genre_key, na=False)
+    mask = df["genres"].str.contains(genre_name.lower(), na=False)
     filtered = df[mask].copy()
     if "vote_average" in filtered.columns:
         filtered = filtered.sort_values("vote_average", ascending=False)
@@ -745,7 +614,7 @@ def is_in_watchlist(movie_id):
 
 
 # ============================================================
-# SIDEBAR NAVIGATION — matches "My Watchlist" mockup exactly
+# SIDEBAR
 # ============================================================
 NAV_ITEMS = [
     ("home", "Home", "home"),
@@ -756,23 +625,19 @@ NAV_ITEMS = [
 ]
 
 with st.sidebar:
-    st.html(
-        f"""
+    render_html(f"""
         <div class="sidebar-logo">
-            <div class="sidebar-logo-icon">
-                <span style="line-height:1;">{icon('theaters', 18, 'white')}</span>
-            </div>
+            <div class="sidebar-logo-icon">{icon('theaters', 18, 'white')}</div>
             <div class="sidebar-logo-text"><span class="cine">Cine</span><span class="match">Match</span></div>
         </div>
-        """
-    )
+    """)
 
     for key, label, icon_name in NAV_ITEMS:
         is_active = st.session_state.page == key
         cols = st.columns([1, 6])
         with cols[0]:
-            st.html(
-                f'<div style="padding-top:9px;">{icon(icon_name, 19, "var(--red)" if is_active else "#9a9a9a")}</div>')
+            color = "var(--red)" if is_active else "#9a9a9a"
+            render_html(f'<div style="padding-top:9px;">{icon(icon_name, 19, color)}</div>')
         with cols[1]:
             if st.button(label, key=f"nav_{key}",
                          use_container_width=True,
@@ -781,26 +646,20 @@ with st.sidebar:
                 st.session_state.selected_genre = None
                 st.rerun()
 
-    st.html(
-    '<hr class="sidebar-divider">'
-)
+    render_html('<hr class="sidebar-divider">')
 
     scols = st.columns([1, 6])
     with scols[0]:
-        st.html(f'<div style="padding-top:9px;">{icon("search", 19, "#9a9a9a")}</div>')
+        render_html(f'<div style="padding-top:9px;">{icon("search", 19, "#9a9a9a")}</div>')
     with scols[1]:
         if st.button("Search", key="nav_search_link", use_container_width=True,
                      type="primary" if st.session_state.page == "search" else "secondary"):
             st.session_state.page = "search"
             st.rerun()
 
-    st.html(
-    '<div class="sidebar-spacer"></div>'
-)
-
     lcols = st.columns([1, 6])
     with lcols[0]:
-        st.html(f'<div style="padding-top:9px;">{icon("logout", 19, "#9a9a9a")}</div>')
+        render_html(f'<div style="padding-top:9px;">{icon("logout", 19, "#9a9a9a")}</div>')
     with lcols[1]:
         st.button("Log Out", key="nav_logout", use_container_width=True)
 
@@ -818,7 +677,7 @@ def render_shelf_card(title, poster, rating, year=None):
     poster_html = (
         f'<img class="shelf-poster" src="{poster}" alt="{title}">'
         if poster else
-        f'<div class="shelf-poster" style="background:{poster_placeholder_style(title)};'
+        f'<div class="shelf-poster" style="background:{placeholder_bg(title)};'
         f'display:flex;align-items:center;justify-content:center;">{icon("movie", 30, "rgba(255,255,255,0.5)")}</div>'
     )
     year_txt = f" · {year}" if year else ""
@@ -842,13 +701,12 @@ def render_result_card(row, show_similarity=True):
 
     poster = None
     if TMDB_API_KEY:
-        poster, _ = fetch_poster_by_id(movie_id)
-        poster = poster or fetch_poster_by_title(row["title"])
+        poster = fetch_poster_by_id(movie_id) or fetch_poster_by_title(row["title"])
 
     poster_html = (
         f'<img class="result-poster" src="{poster}" alt="{row["title"]}">'
         if poster else
-        f'<div class="result-poster" style="background:{poster_placeholder_style(row["title"])};'
+        f'<div class="result-poster" style="background:{placeholder_bg(row["title"])};'
         f'display:flex;align-items:center;justify-content:center;">{icon("movie", 34, "rgba(255,255,255,0.5)")}</div>'
     )
 
@@ -857,11 +715,7 @@ def render_result_card(row, show_similarity=True):
         pct = int(sim_val * 100)
         match_html = f'<span class="match">{pct}% Similar</span>'
 
-    in_wl = is_in_watchlist(movie_id)
-    heart_color = "var(--red)" if in_wl else "#888"
-
-    st.html(
-    f"""
+    render_html(f"""
         <div class="result-card">
             {poster_html}
             <div class="result-body">
@@ -872,13 +726,12 @@ def render_result_card(row, show_similarity=True):
                     {match_html}
                 </div>
                 <div class="result-overview">{overview}</div>
-                <div class="result-heart {'active' if in_wl else ''}">{icon('favorite', 15, heart_color)}</div>
             </div>
         </div>
-        """
-)
+    """)
 
     if movie_id is not None:
+        in_wl = is_in_watchlist(movie_id)
         label = "In Watchlist — tap to remove" if in_wl else "Add to Watchlist"
         if st.button(label, key=f"wl_{movie_id}_{row['title'][:20]}", use_container_width=True):
             if in_wl:
@@ -892,36 +745,32 @@ def render_result_card(row, show_similarity=True):
 # PAGE: HOME
 # ============================================================
 def render_home():
-    st.html(
-    """
+    render_html("""
         <div class="home-hero">
             <div class="home-hero-label">Welcome to CineMatch</div>
             <h1 class="home-hero-title">Find Your Next Obsession</h1>
             <p class="home-hero-sub">AI-powered recommendations. Endless stories. Discover movies that match your mood.</p>
         </div>
-        """
-)
+    """)
 
-    st.html(f'<div class="section-title">{icon("today", 20, "var(--red)")} Movie of the Day</div>')
+    render_html(f'<div class="section-title">{icon("today", 20, "var(--red)")} Movie of the Day</div>')
 
     seed = int(datetime.date.today().strftime("%Y%m%d"))
     random.seed(seed)
-    top_rated = df[df["vote_average"] >= 7.5] if "vote_average" in df.columns else df
-    if not top_rated.empty:
-        motd = top_rated.sample(1).iloc[0]
+    top = df[df["vote_average"] >= 7.5] if "vote_average" in df.columns else df
+    if not top.empty:
+        motd = top.sample(1).iloc[0]
         poster = None
         if TMDB_API_KEY:
-            poster, _ = fetch_poster_by_id(motd.get("id"))
-            poster = poster or fetch_poster_by_title(motd["title"])
+            poster = fetch_poster_by_id(motd.get("id")) or fetch_poster_by_title(motd["title"])
         poster_html = (
             f'<img class="motd-poster" src="{poster}" alt="poster">'
             if poster else
-            f'<div class="motd-poster" style="background:{poster_placeholder_style(motd["title"])};'
+            f'<div class="motd-poster" style="background:{placeholder_bg(motd["title"])};'
             f'display:flex;align-items:center;justify-content:center;">{icon("movie", 32, "rgba(255,255,255,0.5)")}</div>'
         )
         rating = motd.get("vote_average", 0)
-        st.html(
-    f"""
+        render_html(f"""
             <div class="motd-banner">
                 {poster_html}
                 <div style="flex:1;min-width:0;">
@@ -933,29 +782,28 @@ def render_home():
                     <div class="motd-overview">{str(motd['overview'])[:340]}…</div>
                 </div>
             </div>
-            """
-)
+        """)
 
     if TMDB_API_KEY:
-        st.html(f'<div class="section-title">{icon("local_fire_department", 20, "var(--red)")} Trending This Week</div>')
+        render_html(f'<div class="section-title">{icon("local_fire_department", 20, "var(--red)")} Trending This Week</div>')
         trending = fetch_trending_movies(12)
         if trending:
             cards = "".join([
                 render_shelf_card(m["title"], m["poster"], m["rating"] or 0, m.get("release"))
                 for m in trending
             ])
-            st.html(f'<div class="shelf">{cards}</div>')
+            render_html(f'<div class="shelf">{cards}</div>')
         else:
             st.info("Trending unavailable right now.")
 
-    st.html(f'<div class="section-title">{icon("explore", 20, "var(--red)")} Or Explore by Genre</div>')
+    render_html(f'<div class="section-title">{icon("explore", 20, "var(--red)")} Or Explore by Genre</div>')
     if st.button("BROWSE ALL GENRES →", use_container_width=True, key="home_browse", type="primary"):
         st.session_state.page = "browse"
         st.rerun()
 
 
 # ============================================================
-# PAGE: BROWSE — matches "Browse by Genre" mockup exactly
+# PAGE: BROWSE
 # ============================================================
 def render_browse():
     if st.session_state.selected_genre:
@@ -965,25 +813,21 @@ def render_browse():
             st.rerun()
 
         label = GENRE_LABELS.get(genre, genre)
-        st.html(f'<h1 class="page-title">{label}</h1>')
+        render_html(f'<h1 class="page-title">{label}</h1>')
 
         movies = get_genre_movies(df, genre, n=20)
         if movies.empty:
             st.info(f"No movies found in {label}.")
         else:
-            st.html(f'<p class="page-subtitle">Top {len(movies)} highest-rated films in {label}</p>')
+            render_html(f'<p class="page-subtitle">Top {len(movies)} highest-rated films in {label}</p>')
             cols = st.columns(4)
             for i, (_, row) in enumerate(movies.iterrows()):
                 with cols[i % 4]:
                     render_result_card(row, show_similarity=False)
         return
 
-    st.html(
-    '<h1 class="hero-title">Browse by Genre</h1>'
-)
-    st.html(
-    '<p class="hero-subtitle">Explore movies by genre. Discover stories that match your mood.</p>'
-)
+    render_html('<h1 class="hero-title">Browse by Genre</h1>')
+    render_html('<p class="hero-subtitle">Explore movies by genre. Discover stories that match your mood.</p>')
 
     cols_per_row = 4
     for i in range(0, len(BROWSE_GENRES), cols_per_row):
@@ -998,11 +842,10 @@ def render_browse():
                 bg_style = (
                     f"background-image: url('{backdrop}');"
                     if backdrop else
-                    f"background-image: {poster_placeholder_style(genre)};"
+                    f"background-image: {placeholder_bg(genre)};"
                 )
 
-                st.html(
-    f"""
+                render_html(f"""
                     <div class="genre-card" style="{bg_style}">
                         <div class="genre-scrim">
                             <div class="genre-icon">{icon(icon_name, 30, "white")}</div>
@@ -1012,34 +855,29 @@ def render_browse():
                             </div>
                         </div>
                     </div>
-                    """
-)
+                """)
                 if st.button(f"Open {label}", key=f"genre_{genre}", use_container_width=True):
                     st.session_state.selected_genre = genre
                     st.rerun()
 
 
 # ============================================================
-# PAGE: SEARCH — matches "Because you liked..." mockup exactly
+# PAGE: SEARCH
 # ============================================================
 def render_search():
-    with st.container():
-        col_icon, col_input, col_btn = st.columns([0.4, 8, 0.8])
-        with col_icon:
-            st.html(f'<div style="padding-top:12px;">{icon("search", 20, "#888")}</div>')
-        with col_input:
-            query = st.text_input(
-                "Search", placeholder="Try: The Dark Knight, Inception, Avatar…",
-                label_visibility="collapsed", key="search_query",
-            )
-        with col_btn:
-            go = st.button("Search", key="search_go_btn", use_container_width=True, type="primary")
+    col_input, col_btn = st.columns([9, 1])
+    with col_input:
+        query = st.text_input(
+            "Search", placeholder="Try: The Dark Knight, Inception, Avatar…",
+            label_visibility="collapsed", key="search_query",
+        )
+    with col_btn:
+        go = st.button("Search", key="search_go_btn", use_container_width=True, type="primary")
 
     if st.session_state.history:
         hist = "  ·  ".join(st.session_state.history)
-        st.html(
-            f'<div style="color:#888;font-size:12.5px;margin:-14px 0 18px 2px;">'
-            f'{icon("history", 14, "#888")} Recent: {hist}</div>')
+        render_html(f'<div style="color:#888;font-size:12.5px;margin:-6px 0 18px 2px;">'
+                    f'{icon("history", 14, "#888")} Recent: {hist}</div>')
 
     with st.expander("Filter by genre (optional)"):
         selected_genres = st.multiselect(
@@ -1051,9 +889,8 @@ def render_search():
     if query and len(query) > 1:
         suggestions = search_titles(df, query)
         if suggestions:
-            st.html(
-                f'<div style="color:#888;font-size:12.5px;margin:2px 0 18px 2px;">'
-                f'{icon("lightbulb", 14, "#888")} Suggestions: {"  ·  ".join(suggestions)}</div>')
+            render_html(f'<div style="color:#888;font-size:12.5px;margin:2px 0 18px 2px;">'
+                        f'{icon("lightbulb", 14, "#888")} Suggestions: {"  ·  ".join(suggestions)}</div>')
 
     if go:
         if not query:
@@ -1071,8 +908,7 @@ def render_search():
             if results.empty:
                 st.error(f'No movies found matching "{query}". Try another title.')
             else:
-                st.html(
-                    f'<div class="results-heading">Because you liked <em>"{query.title()}"</em></div>')
+                render_html(f'<div class="results-heading">Because you liked <em>"{query.title()}"</em></div>')
                 cols = st.columns(4)
                 for i, (_, row) in enumerate(results.iterrows()):
                     with cols[i % 4]:
@@ -1080,22 +916,20 @@ def render_search():
 
 
 # ============================================================
-# PAGE: WATCHLIST — matches "My Watchlist" mockup exactly
+# PAGE: WATCHLIST
 # ============================================================
 def render_watchlist():
-    st.html(
-    f"""
+    render_html(f"""
         <div class="page-header">
             <div class="page-title-row">
                 <h1 class="page-title">My Watchlist</h1>
                 {icon('favorite', 26, 'var(--red)')}
             </div>
         </div>
-        """
-)
+    """)
 
     n = len(st.session_state.watchlist)
-    st.html(f'<div class="watch-count">{n} title{"s" if n != 1 else ""} · Sorted by added date</div>')
+    render_html(f'<div class="watch-count">{n} title{"s" if n != 1 else ""} · Sorted by added date</div>')
 
     top_l, top_r = st.columns([6, 2])
     with top_r:
@@ -1103,17 +937,15 @@ def render_watchlist():
                      label_visibility="collapsed", key="wl_sort")
 
     if not st.session_state.watchlist:
-        st.html(
-    f"""
+        render_html(f"""
             <div class="empty-state">
-                {icon('movie_filter', 44, '#444')}
+                {icon('movie', 44, '#444')}
                 <p style="margin-top:16px;font-size:15px;">
                     Your watchlist is empty.<br>
                     Search for movies and tap <strong>Add to Watchlist</strong> to save them here.
                 </p>
             </div>
-            """
-)
+        """)
         return
 
     items = list(st.session_state.watchlist)
@@ -1130,75 +962,51 @@ def render_watchlist():
             poster_html = (
                 f'<img class="watch-poster" src="{poster}" alt="{m["title"]}">'
                 if poster else
-                f'<div class="watch-poster" style="background:{poster_placeholder_style(m["title"])};'
+                f'<div class="watch-poster" style="background:{placeholder_bg(m["title"])};'
                 f'display:flex;align-items:center;justify-content:center;">{icon("movie", 28, "rgba(255,255,255,0.5)")}</div>'
             )
             genres_txt = ", ".join((m.get("genres") or [])[:2])
             year_genres = " · ".join([x for x in [m.get("year"), genres_txt] if x])
 
-            st.html(
-    f"""
+            render_html(f"""
                 <div class="watch-card">
                     <div class="watch-poster-wrap">
                         {poster_html}
                         <div class="watch-rating-badge">{icon('star', 11, 'var(--gold)')} {m.get('rating') or 'N/A'}</div>
-                        <div class="watch-remove-badge">{icon('close', 14, 'white')}</div>
+                        <div class="watch-remove-badge">{icon('close', 12, 'white')}</div>
                     </div>
                     <div class="watch-title">{m['title']}</div>
                     <div class="watch-year">{year_genres}</div>
                 </div>
-                """
-)
-            bc1, bc2 = st.columns(2)
-            with bc1:
-                if st.button("Remove", key=f"rm_{m['id']}", use_container_width=True):
-                    remove_from_watchlist(m["id"])
-                    st.rerun()
-            with bc2:
-                if st.button("More like this", key=f"more_{m['id']}", use_container_width=True):
-                    st.session_state.page = "search"
-                    st.session_state["search_query"] = m["title"]
-                    st.rerun()
+            """)
+            if st.button("Remove", key=f"rm_{m['id']}", use_container_width=True):
+                remove_from_watchlist(m["id"])
+                st.rerun()
 
 
 # ============================================================
-# PAGE: COLLECTIONS (placeholder — sidebar link target)
+# PAGE: COLLECTIONS / PROFILE
 # ============================================================
 def render_collections():
-    st.html(
-    '<h1 class="page-title">Collections</h1>'
-)
-    st.html(
-    '<p class="page-subtitle">Curated groups of titles. Coming soon.</p>'
-)
-    st.html(
-    f"""
+    render_html('<h1 class="page-title">Collections</h1>')
+    render_html('<p class="page-subtitle">Curated groups of titles. Coming soon.</p>')
+    render_html(f"""
         <div class="empty-state">
             {icon('video_library', 44, '#444')}
-            <p style="margin-top:16px;font-size:15px;">Collections aren't set up yet — check back soon.</p>
+            <p style="margin-top:16px;font-size:15px;">Collections aren't set up yet.</p>
         </div>
-        """
-)
+    """)
 
 
-# ============================================================
-# PAGE: PROFILE (placeholder — sidebar link target)
-# ============================================================
 def render_profile():
-    st.html(
-    '<h1 class="page-title">Profile</h1>'
-)
-    st.html(
-    '<p class="page-subtitle">Your account details.</p>'
-)
-    st.html(
-    f"""
+    render_html('<h1 class="page-title">Profile</h1>')
+    render_html('<p class="page-subtitle">Your account details.</p>')
+    render_html(f"""
         <div class="empty-state">
             {icon('person', 44, '#444')}
             <p style="margin-top:16px;font-size:15px;">Profile settings aren't set up yet.</p>
         </div>
-        """
-)
+    """)
 
 
 # ============================================================
@@ -1218,10 +1026,8 @@ PAGES.get(st.session_state.page, render_browse)()
 # ============================================================
 # FOOTER
 # ============================================================
-st.html(
-    f"""
+render_html(f"""
     <div style="text-align:center;padding:40px 0 10px;color:#555;font-size:12px;">
         CINEMATCH · Powered by NLP & TF-IDF · Built with {icon('favorite', 12, '#555')} at TekHer AI Bootcamp
     </div>
-    """
-)
+""")
