@@ -52,7 +52,7 @@ for key, default in {
 APP_CSS = """
 /* ============================================================
    CINEMATCH — stylesheet
-   Loaded once by app.py via st.markdown(f"<style>{css}</style>")
+   Loaded once by app.py via st.html(APP_CSS wrapped in a <style> tag)
    ============================================================ */
 
 :root {
@@ -428,22 +428,64 @@ div.main .stButton > button[kind="primary"]:hover { background-color: var(--red-
 
 """
 
-st.markdown(
-    '<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">'
-    '<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">'
-    '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">',
-    unsafe_allow_html=True,
-)
-st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
+st.html(f"""
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>{APP_CSS}</style>
+""")
 
 
 # ============================================================
-# ICON HELPERS (Material Icons only — never emoji)
+# ICON HELPERS — inline SVG icons (true vector line-icons).
+# Not a web font (which can fail to load and show raw text like
+# "movie_filter"), and not emoji (which render as colorful
+# platform pictures instead of clean icons). Every icon below is
+# self-contained SVG markup styled with currentColor, so it always
+# renders identically everywhere with zero external dependency.
 # ============================================================
-def icon(name: str, size: int = 20, color: str = "currentColor", outlined: bool = False) -> str:
-    cls = "material-icons-outlined" if outlined else "material-icons-round"
+ICON_PATHS = {
+    "home": '<path d="M3 12l9-9 9 9"/><path d="M9 21V9h6v12"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/>',
+    "search": '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/>',
+    "favorite": '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+    "video_library": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+    "person": '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    "logout": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+    "movie": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="2" y1="9" x2="7" y2="9"/><line x1="2" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="22" y2="9"/><line x1="17" y1="15" x2="22" y2="15"/>',
+    "movie_filter": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="2" y1="9" x2="7" y2="9"/><line x1="2" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="22" y2="9"/><line x1="17" y1="15" x2="22" y2="15"/>',
+    "theaters": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="2" y1="9" x2="7" y2="9"/><line x1="2" y1="15" x2="7" y2="15"/><line x1="17" y1="9" x2="22" y2="9"/><line x1="17" y1="15" x2="22" y2="15"/>',
+    "star": '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    "close": '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    "today": '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+    "auto_awesome": '<path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z"/>',
+    "local_fire_department": '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+    "explore": '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+    "history": '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    "lightbulb": '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.5.4.9 1.1.9 1.8V17a1 1 0 0 0 1 1h4.2a1 1 0 0 0 1-1v-.5c0-.7.4-1.4.9-1.8A7 7 0 0 0 12 2z"/>',
+    "bolt": '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    "rocket_launch": '<path d="M12 2c2.2 2 3.3 5.2 3.3 8.3 0 2.2-.5 3.8-1.1 5.4l-2.2 5.3-2.2-5.3c-.6-1.6-1.1-3.2-1.1-5.4C8.7 7.2 9.8 4 12 2z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8.2 16.2l-2.7 2.7M15.8 16.2l2.7 2.7"/>',
+    "dark_mode": '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+    "theater_comedy": '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>',
+    "masks": '<circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>',
+    "fingerprint": '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    "camera_alt": '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+    "tune": '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+}
+
+# Icons that read correctly as solid shapes (rating stars, hearts, sparkles,
+# bolts) are filled; every other icon stays an outlined line-icon.
+FILLED_ICONS = {"star", "favorite", "bolt", "auto_awesome"}
+
+
+def icon(name: str, size: int = 20, color: str = "currentColor") -> str:
+    inner = ICON_PATHS.get(name, '<circle cx="12" cy="12" r="9"/>')
+    if name in FILLED_ICONS:
+        style = f'fill="{color}" stroke="none"'
+    else:
+        style = f'fill="none" stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
     return (
-        f'<span class="{cls} mi" style="font-size:{size}px;color:{color};">{name}</span>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" {style} '
+        f'style="vertical-align:middle;display:inline-block;">{inner}</svg>'
     )
 
 
@@ -714,26 +756,23 @@ NAV_ITEMS = [
 ]
 
 with st.sidebar:
-    st.markdown(
-        """
+    st.html(
+        f"""
         <div class="sidebar-logo">
             <div class="sidebar-logo-icon">
-                <span class="material-icons-round" style="color:white;font-size:19px;">theaters</span>
+                <span style="line-height:1;">{icon('theaters', 18, 'white')}</span>
             </div>
             <div class="sidebar-logo-text"><span class="cine">Cine</span><span class="match">Match</span></div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     for key, label, icon_name in NAV_ITEMS:
         is_active = st.session_state.page == key
         cols = st.columns([1, 6])
         with cols[0]:
-            st.markdown(
-                f'<div style="padding-top:9px;">{icon(icon_name, 19, "var(--red)" if is_active else "#9a9a9a")}</div>',
-                unsafe_allow_html=True,
-            )
+            st.html(
+                f'<div style="padding-top:9px;">{icon(icon_name, 19, "var(--red)" if is_active else "#9a9a9a")}</div>')
         with cols[1]:
             if st.button(label, key=f"nav_{key}",
                          use_container_width=True,
@@ -742,22 +781,26 @@ with st.sidebar:
                 st.session_state.selected_genre = None
                 st.rerun()
 
-    st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+    st.html(
+    '<hr class="sidebar-divider">'
+)
 
     scols = st.columns([1, 6])
     with scols[0]:
-        st.markdown(f'<div style="padding-top:9px;">{icon("search", 19, "#9a9a9a")}</div>', unsafe_allow_html=True)
+        st.html(f'<div style="padding-top:9px;">{icon("search", 19, "#9a9a9a")}</div>')
     with scols[1]:
         if st.button("Search", key="nav_search_link", use_container_width=True,
                      type="primary" if st.session_state.page == "search" else "secondary"):
             st.session_state.page = "search"
             st.rerun()
 
-    st.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
+    st.html(
+    '<div class="sidebar-spacer"></div>'
+)
 
     lcols = st.columns([1, 6])
     with lcols[0]:
-        st.markdown(f'<div style="padding-top:9px;">{icon("logout", 19, "#9a9a9a")}</div>', unsafe_allow_html=True)
+        st.html(f'<div style="padding-top:9px;">{icon("logout", 19, "#9a9a9a")}</div>')
     with lcols[1]:
         st.button("Log Out", key="nav_logout", use_container_width=True)
 
@@ -817,8 +860,8 @@ def render_result_card(row, show_similarity=True):
     in_wl = is_in_watchlist(movie_id)
     heart_color = "var(--red)" if in_wl else "#888"
 
-    st.markdown(
-        f"""
+    st.html(
+    f"""
         <div class="result-card">
             {poster_html}
             <div class="result-body">
@@ -832,12 +875,11 @@ def render_result_card(row, show_similarity=True):
                 <div class="result-heart {'active' if in_wl else ''}">{icon('favorite', 15, heart_color)}</div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+)
 
     if movie_id is not None:
-        label = "♥ In Watchlist — tap to remove" if in_wl else "Add to Watchlist"
+        label = "In Watchlist — tap to remove" if in_wl else "Add to Watchlist"
         if st.button(label, key=f"wl_{movie_id}_{row['title'][:20]}", use_container_width=True):
             if in_wl:
                 remove_from_watchlist(movie_id)
@@ -850,18 +892,17 @@ def render_result_card(row, show_similarity=True):
 # PAGE: HOME
 # ============================================================
 def render_home():
-    st.markdown(
-        """
+    st.html(
+    """
         <div class="home-hero">
             <div class="home-hero-label">Welcome to CineMatch</div>
             <h1 class="home-hero-title">Find Your Next Obsession</h1>
             <p class="home-hero-sub">AI-powered recommendations. Endless stories. Discover movies that match your mood.</p>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+)
 
-    st.markdown(f'<div class="section-title">{icon("today", 20, "var(--red)")} Movie of the Day</div>', unsafe_allow_html=True)
+    st.html(f'<div class="section-title">{icon("today", 20, "var(--red)")} Movie of the Day</div>')
 
     seed = int(datetime.date.today().strftime("%Y%m%d"))
     random.seed(seed)
@@ -879,8 +920,8 @@ def render_home():
             f'display:flex;align-items:center;justify-content:center;">{icon("movie", 32, "rgba(255,255,255,0.5)")}</div>'
         )
         rating = motd.get("vote_average", 0)
-        st.markdown(
-            f"""
+        st.html(
+    f"""
             <div class="motd-banner">
                 {poster_html}
                 <div style="flex:1;min-width:0;">
@@ -892,23 +933,22 @@ def render_home():
                     <div class="motd-overview">{str(motd['overview'])[:340]}…</div>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            """
+)
 
     if TMDB_API_KEY:
-        st.markdown(f'<div class="section-title">{icon("local_fire_department", 20, "var(--red)")} Trending This Week</div>', unsafe_allow_html=True)
+        st.html(f'<div class="section-title">{icon("local_fire_department", 20, "var(--red)")} Trending This Week</div>')
         trending = fetch_trending_movies(12)
         if trending:
             cards = "".join([
                 render_shelf_card(m["title"], m["poster"], m["rating"] or 0, m.get("release"))
                 for m in trending
             ])
-            st.markdown(f'<div class="shelf">{cards}</div>', unsafe_allow_html=True)
+            st.html(f'<div class="shelf">{cards}</div>')
         else:
             st.info("Trending unavailable right now.")
 
-    st.markdown(f'<div class="section-title">{icon("explore", 20, "var(--red)")} Or Explore by Genre</div>', unsafe_allow_html=True)
+    st.html(f'<div class="section-title">{icon("explore", 20, "var(--red)")} Or Explore by Genre</div>')
     if st.button("BROWSE ALL GENRES →", use_container_width=True, key="home_browse", type="primary"):
         st.session_state.page = "browse"
         st.rerun()
@@ -925,21 +965,25 @@ def render_browse():
             st.rerun()
 
         label = GENRE_LABELS.get(genre, genre)
-        st.markdown(f'<h1 class="page-title">{label}</h1>', unsafe_allow_html=True)
+        st.html(f'<h1 class="page-title">{label}</h1>')
 
         movies = get_genre_movies(df, genre, n=20)
         if movies.empty:
             st.info(f"No movies found in {label}.")
         else:
-            st.markdown(f'<p class="page-subtitle">Top {len(movies)} highest-rated films in {label}</p>', unsafe_allow_html=True)
+            st.html(f'<p class="page-subtitle">Top {len(movies)} highest-rated films in {label}</p>')
             cols = st.columns(4)
             for i, (_, row) in enumerate(movies.iterrows()):
                 with cols[i % 4]:
                     render_result_card(row, show_similarity=False)
         return
 
-    st.markdown('<h1 class="hero-title">Browse by Genre</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-subtitle">Explore movies by genre. Discover stories that match your mood.</p>', unsafe_allow_html=True)
+    st.html(
+    '<h1 class="hero-title">Browse by Genre</h1>'
+)
+    st.html(
+    '<p class="hero-subtitle">Explore movies by genre. Discover stories that match your mood.</p>'
+)
 
     cols_per_row = 4
     for i in range(0, len(BROWSE_GENRES), cols_per_row):
@@ -957,20 +1001,19 @@ def render_browse():
                     f"background-image: {poster_placeholder_style(genre)};"
                 )
 
-                st.markdown(
-                    f"""
+                st.html(
+    f"""
                     <div class="genre-card" style="{bg_style}">
                         <div class="genre-scrim">
-                            <div class="genre-icon">{icon(icon_name, 30, "white", outlined=True)}</div>
+                            <div class="genre-icon">{icon(icon_name, 30, "white")}</div>
                             <div>
                                 <div class="genre-name">{label}</div>
                                 <div class="genre-count"><span class="dot"></span>{count:,} movies</div>
                             </div>
                         </div>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                    """
+)
                 if st.button(f"Open {label}", key=f"genre_{genre}", use_container_width=True):
                     st.session_state.selected_genre = genre
                     st.rerun()
@@ -983,22 +1026,20 @@ def render_search():
     with st.container():
         col_icon, col_input, col_btn = st.columns([0.4, 8, 0.8])
         with col_icon:
-            st.markdown(f'<div style="padding-top:12px;">{icon("search", 20, "#888")}</div>', unsafe_allow_html=True)
+            st.html(f'<div style="padding-top:12px;">{icon("search", 20, "#888")}</div>')
         with col_input:
             query = st.text_input(
                 "Search", placeholder="Try: The Dark Knight, Inception, Avatar…",
                 label_visibility="collapsed", key="search_query",
             )
         with col_btn:
-            go = st.button("🔍", key="search_go_btn", use_container_width=True, type="primary")
+            go = st.button("Search", key="search_go_btn", use_container_width=True, type="primary")
 
     if st.session_state.history:
         hist = "  ·  ".join(st.session_state.history)
-        st.markdown(
+        st.html(
             f'<div style="color:#888;font-size:12.5px;margin:-14px 0 18px 2px;">'
-            f'{icon("history", 14, "#888")} Recent: {hist}</div>',
-            unsafe_allow_html=True,
-        )
+            f'{icon("history", 14, "#888")} Recent: {hist}</div>')
 
     with st.expander("Filter by genre (optional)"):
         selected_genres = st.multiselect(
@@ -1010,11 +1051,9 @@ def render_search():
     if query and len(query) > 1:
         suggestions = search_titles(df, query)
         if suggestions:
-            st.markdown(
+            st.html(
                 f'<div style="color:#888;font-size:12.5px;margin:2px 0 18px 2px;">'
-                f'{icon("lightbulb", 14, "#888")} Suggestions: {"  ·  ".join(suggestions)}</div>',
-                unsafe_allow_html=True,
-            )
+                f'{icon("lightbulb", 14, "#888")} Suggestions: {"  ·  ".join(suggestions)}</div>')
 
     if go:
         if not query:
@@ -1032,10 +1071,8 @@ def render_search():
             if results.empty:
                 st.error(f'No movies found matching "{query}". Try another title.')
             else:
-                st.markdown(
-                    f'<div class="results-heading">Because you liked <em>"{query.title()}"</em></div>',
-                    unsafe_allow_html=True,
-                )
+                st.html(
+                    f'<div class="results-heading">Because you liked <em>"{query.title()}"</em></div>')
                 cols = st.columns(4)
                 for i, (_, row) in enumerate(results.iterrows()):
                     with cols[i % 4]:
@@ -1046,20 +1083,19 @@ def render_search():
 # PAGE: WATCHLIST — matches "My Watchlist" mockup exactly
 # ============================================================
 def render_watchlist():
-    st.markdown(
-        f"""
+    st.html(
+    f"""
         <div class="page-header">
             <div class="page-title-row">
                 <h1 class="page-title">My Watchlist</h1>
                 {icon('favorite', 26, 'var(--red)')}
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+)
 
     n = len(st.session_state.watchlist)
-    st.markdown(f'<div class="watch-count">{n} title{"s" if n != 1 else ""} · Sorted by added date</div>', unsafe_allow_html=True)
+    st.html(f'<div class="watch-count">{n} title{"s" if n != 1 else ""} · Sorted by added date</div>')
 
     top_l, top_r = st.columns([6, 2])
     with top_r:
@@ -1067,8 +1103,8 @@ def render_watchlist():
                      label_visibility="collapsed", key="wl_sort")
 
     if not st.session_state.watchlist:
-        st.markdown(
-            f"""
+        st.html(
+    f"""
             <div class="empty-state">
                 {icon('movie_filter', 44, '#444')}
                 <p style="margin-top:16px;font-size:15px;">
@@ -1076,9 +1112,8 @@ def render_watchlist():
                     Search for movies and tap <strong>Add to Watchlist</strong> to save them here.
                 </p>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            """
+)
         return
 
     items = list(st.session_state.watchlist)
@@ -1101,8 +1136,8 @@ def render_watchlist():
             genres_txt = ", ".join((m.get("genres") or [])[:2])
             year_genres = " · ".join([x for x in [m.get("year"), genres_txt] if x])
 
-            st.markdown(
-                f"""
+            st.html(
+    f"""
                 <div class="watch-card">
                     <div class="watch-poster-wrap">
                         {poster_html}
@@ -1112,9 +1147,8 @@ def render_watchlist():
                     <div class="watch-title">{m['title']}</div>
                     <div class="watch-year">{year_genres}</div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                """
+)
             bc1, bc2 = st.columns(2)
             with bc1:
                 if st.button("Remove", key=f"rm_{m['id']}", use_container_width=True):
@@ -1131,34 +1165,40 @@ def render_watchlist():
 # PAGE: COLLECTIONS (placeholder — sidebar link target)
 # ============================================================
 def render_collections():
-    st.markdown('<h1 class="page-title">Collections</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="page-subtitle">Curated groups of titles. Coming soon.</p>', unsafe_allow_html=True)
-    st.markdown(
-        f"""
+    st.html(
+    '<h1 class="page-title">Collections</h1>'
+)
+    st.html(
+    '<p class="page-subtitle">Curated groups of titles. Coming soon.</p>'
+)
+    st.html(
+    f"""
         <div class="empty-state">
             {icon('video_library', 44, '#444')}
             <p style="margin-top:16px;font-size:15px;">Collections aren't set up yet — check back soon.</p>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+)
 
 
 # ============================================================
 # PAGE: PROFILE (placeholder — sidebar link target)
 # ============================================================
 def render_profile():
-    st.markdown('<h1 class="page-title">Profile</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="page-subtitle">Your account details.</p>', unsafe_allow_html=True)
-    st.markdown(
-        f"""
+    st.html(
+    '<h1 class="page-title">Profile</h1>'
+)
+    st.html(
+    '<p class="page-subtitle">Your account details.</p>'
+)
+    st.html(
+    f"""
         <div class="empty-state">
             {icon('person', 44, '#444')}
             <p style="margin-top:16px;font-size:15px;">Profile settings aren't set up yet.</p>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """
+)
 
 
 # ============================================================
@@ -1178,11 +1218,10 @@ PAGES.get(st.session_state.page, render_browse)()
 # ============================================================
 # FOOTER
 # ============================================================
-st.markdown(
+st.html(
     f"""
     <div style="text-align:center;padding:40px 0 10px;color:#555;font-size:12px;">
         CINEMATCH · Powered by NLP & TF-IDF · Built with {icon('favorite', 12, '#555')} at TekHer AI Bootcamp
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
