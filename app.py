@@ -1,7 +1,7 @@
 """
 CineMatch — Netflix-style movie recommender
-Streamlit Cloud-ready with TDb API integration.
-Pages: Home, Browse, Search, Watchlist, Collections, Profile.
+Streamlit Cloud-ready with TMDb API integration.
+Single-page app with top navigation (no sidebar).
 """
 
 import ast
@@ -22,7 +22,7 @@ st.set_page_config(
     page_title="CineMatch — Your Next Favorite Film",
     page_icon=":movie_camera:",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -42,7 +42,7 @@ for key, default in {
 
 
 # ============================================================
-# RENDER HELPER — strips indentation before passing to st.html()
+# RENDER HELPER
 # ============================================================
 def render_html(markup: str):
     """Render HTML reliably by stripping all leading whitespace."""
@@ -50,16 +50,14 @@ def render_html(markup: str):
 
 
 # ============================================================
-# CSS — loaded as one block
+# CSS
 # ============================================================
 CSS = """
 :root {
     --red: #E50914;
     --red-hover: #F40612;
     --black: #0f0f0f;
-    --panel: #141414;
     --card: #1b1b1b;
-    --card-2: #1f1f1f;
     --border: #2a2a2a;
     --white: #FFFFFF;
     --muted: #9a9a9a;
@@ -72,61 +70,59 @@ html, body, .stApp {
 }
 #MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; height: 0; }
 [data-testid="stToolbar"] { display: none; }
+[data-testid="stSidebar"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+
 .block-container {
-    padding-top: 1.6rem !important;
+    padding-top: 1.4rem !important;
     padding-bottom: 3rem !important;
     max-width: 1280px !important;
 }
 
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background-color: var(--panel) !important;
-    border-right: 1px solid var(--border);
-    min-width: 250px !important;
-}
-section[data-testid="stSidebar"] > div { padding-top: 1.4rem; }
-.sidebar-logo {
-    display: flex; align-items: center; gap: 10px;
-    padding: 0 4px 20px 4px; margin-bottom: 8px;
+/* HEADER */
+.cm-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px 16px 4px;
     border-bottom: 1px solid var(--border);
+    margin-bottom: 22px;
 }
-.sidebar-logo-icon {
+.cm-brand { display: flex; align-items: center; gap: 10px; }
+.cm-brand-icon {
     width: 34px; height: 34px; background: var(--red);
     border-radius: 8px; display: flex; align-items: center;
     justify-content: center; flex-shrink: 0;
 }
-.sidebar-logo-text { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
-.sidebar-logo-text .cine { color: var(--white); }
-.sidebar-logo-text .match { color: var(--red); }
-.sidebar-divider {
-    border: none; border-top: 1px solid var(--border);
-    margin: 10px 4px 10px 4px;
+.cm-brand-text { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+.cm-brand-text .cine { color: var(--white); }
+.cm-brand-text .match { color: var(--red); }
+
+/* NAV */
+.nav-bar {
+    display: flex; align-items: center; gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px; overflow-x: auto;
+    scrollbar-width: none;
 }
-section[data-testid="stSidebar"] .stButton > button {
-    background-color: transparent !important;
-    border: none !important;
-    border-radius: 8px !important;
-    color: #cfcfcf !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    padding: 10px 12px !important;
-    font-size: 14.5px !important;
-    font-weight: 600 !important;
-    width: 100%; box-shadow: none !important;
+.nav-bar::-webkit-scrollbar { display: none; }
+.nav-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 16px;
+    color: #b3b3b3 !important;
+    text-decoration: none !important;
+    font-size: 15px; font-weight: 500;
+    letter-spacing: 0.3px; position: relative;
+    white-space: nowrap; transition: color 0.2s ease;
 }
-section[data-testid="stSidebar"] .stButton > button p { text-align: left !important; }
-section[data-testid="stSidebar"] .stButton > button:hover {
-    background-color: rgba(255,255,255,0.06) !important;
-    color: white !important;
-}
-section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
-    background-color: rgba(229,9,20,0.12) !important;
-    color: var(--red) !important;
-    border-left: 3px solid var(--red) !important;
-    border-radius: 6px !important;
+.nav-link:hover { color: #ffffff !important; }
+.nav-link.active { color: #ffffff !important; font-weight: 700; }
+.nav-link.active::after {
+    content: ''; position: absolute;
+    left: 12px; right: 12px; bottom: 0;
+    height: 2px; background: var(--red);
+    border-radius: 2px;
 }
 
-/* Page titles */
+/* TITLES */
 .page-title { font-size: 34px; font-weight: 900; margin: 0; letter-spacing: -0.5px; }
 .page-subtitle { color: var(--muted); font-size: 14.5px; margin: 6px 0 26px 0; }
 .page-header {
@@ -137,7 +133,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
 .hero-title { font-size: 34px; font-weight: 900; margin: 0 0 6px 0; letter-spacing: -0.5px; }
 .hero-subtitle { color: var(--muted); font-size: 14.5px; margin-bottom: 26px; }
 
-/* Genre cards */
+/* GENRE CARDS */
 .genre-card {
     position: relative; height: 168px; border-radius: 10px;
     border: 2px solid var(--red); overflow: hidden;
@@ -165,7 +161,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     background: var(--red); display: inline-block;
 }
 
-/* Search input */
+/* INPUTS */
 .stTextInput > div > div > input {
     background-color: #1a1a1a !important;
     border: 1px solid #333 !important;
@@ -185,12 +181,10 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     color: white !important;
 }
 
-/* Result cards */
+/* RESULT CARDS */
 .result-card {
-    background: var(--card);
-    border: 2px solid var(--red);
-    border-radius: 10px;
-    overflow: hidden;
+    background: var(--card); border: 2px solid var(--red);
+    border-radius: 10px; overflow: hidden;
     margin-bottom: 14px;
 }
 .result-poster {
@@ -208,37 +202,36 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
 .result-meta .match { color: var(--red); }
 .result-overview { font-size: 12px; color: var(--muted); line-height: 1.5; }
 
-/* Watchlist */
+/* WATCHLIST */
 .watch-count { color: var(--muted); font-size: 14px; margin: 4px 0 24px 0; }
+.watch-poster-wrap { position: relative; border-radius: 10px; overflow: hidden; }
 .watch-poster {
     width: 100%; aspect-ratio: 2 / 3; object-fit: cover;
-    display: block; background: #111; border-radius: 10px;
+    display: block; background: #111;
 }
-.watch-title { font-size: 14px; font-weight: 800; color: white; margin: 10px 0 2px 0; }
-.watch-year { font-size: 12px; color: var(--muted); }
 .watch-rating-badge {
     position: absolute; top: 8px; left: 8px;
     background: rgba(20,20,20,0.9); border-radius: 5px;
     padding: 3px 7px; font-size: 12px; font-weight: 800;
-    color: var(--gold);
+    color: var(--gold); display: flex; align-items: center; gap: 3px;
 }
 .watch-remove-badge {
     position: absolute; top: 8px; right: 8px;
     width: 24px; height: 24px; border-radius: 50%;
-    background: var(--red);
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 900; font-size: 12px;
+    background: var(--red); display: flex;
+    align-items: center; justify-content: center;
 }
-.watch-poster-wrap { position: relative; }
+.watch-title { font-size: 14px; font-weight: 800; color: white; margin: 10px 0 2px 0; }
+.watch-year { font-size: 12px; color: var(--muted); }
 
-/* Empty state */
+/* EMPTY STATE */
 .empty-state {
     padding: 56px 24px; border-radius: 12px;
     background: var(--card); border: 1px solid var(--border);
     text-align: center; color: var(--muted);
 }
 
-/* Home hero */
+/* HOME */
 .home-hero {
     background: linear-gradient(135deg, #1a0505 0%, #2a0a0a 45%, #0f0f0f 100%);
     border-radius: 12px; padding: 46px 40px; margin-bottom: 30px;
@@ -250,6 +243,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
 }
 .home-hero-title { font-size: 38px; font-weight: 900; margin: 0 0 10px 0; letter-spacing: -0.5px; }
 .home-hero-sub { color: #d5d5d5; font-size: 15px; max-width: 480px; line-height: 1.5; }
+
 .section-title {
     font-size: 21px; font-weight: 800; margin: 30px 0 14px 0;
     display: flex; align-items: center; gap: 9px;
@@ -264,6 +258,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     margin-bottom: 3px;
 }
 .shelf-meta { font-size: 11.5px; color: var(--gold); font-weight: 700; }
+
 .motd-banner {
     background: var(--card); border-radius: 12px; padding: 26px;
     margin-bottom: 10px; display: flex; gap: 24px;
@@ -277,7 +272,7 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
 .motd-title { font-size: 24px; font-weight: 900; margin: 0 0 8px 0; }
 .motd-overview { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
 
-/* Buttons */
+/* BUTTONS */
 .stButton > button {
     background-color: var(--red) !important;
     color: white !important;
@@ -290,7 +285,8 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
 }
 .stButton > button:hover { background-color: var(--red-hover) !important; }
 
-/* Responsive */
+.footer { text-align: center; padding: 40px 0 10px; color: #555; font-size: 12px; }
+
 @media (max-width: 768px) {
     .hero-title, .page-title { font-size: 26px; }
     .home-hero { padding: 32px 20px; }
@@ -299,6 +295,11 @@ section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
     .motd-poster { width: 100%; max-width: 260px; height: auto; }
     .shelf-card { flex: 0 0 130px; }
     .genre-card { height: 140px; }
+    .nav-link { font-size: 13px; padding: 12px 10px; }
+}
+@media (max-width: 480px) {
+    .hero-title, .page-title { font-size: 22px; }
+    .nav-link { font-size: 11px; padding: 10px 8px; gap: 5px; }
 }
 """
 
@@ -309,15 +310,12 @@ render_html(f"""
 
 
 # ============================================================
-# INLINE SVG ICONS
+# SVG ICONS
 # ============================================================
 ICON_PATHS = {
     "home": '<path d="M3 12l9-9 9 9"/><path d="M9 21V9h6v12"/>',
     "search": '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/>',
     "favorite": '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
-    "video_library": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
-    "person": '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-    "logout": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
     "movie": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/>',
     "theaters": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/>',
     "star": '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
@@ -614,54 +612,38 @@ def is_in_watchlist(movie_id):
 
 
 # ============================================================
-# SIDEBAR
+# HEADER + NAV
 # ============================================================
-NAV_ITEMS = [
-    ("home", "Home", "home"),
-    ("browse", "Browse", "search"),
-    ("watchlist", "My Watchlist", "favorite"),
-    ("collections", "Collections", "video_library"),
-    ("profile", "Profile", "person"),
-]
+render_html(f"""
+<div class="cm-header">
+    <div class="cm-brand">
+        <div class="cm-brand-icon">{icon('theaters', 18, 'white')}</div>
+        <div class="cm-brand-text"><span class="cine">Cine</span><span class="match">Match</span></div>
+    </div>
+</div>
+""")
 
-with st.sidebar:
-    render_html(f"""
-        <div class="sidebar-logo">
-            <div class="sidebar-logo-icon">{icon('theaters', 18, 'white')}</div>
-            <div class="sidebar-logo-text"><span class="cine">Cine</span><span class="match">Match</span></div>
-        </div>
-    """)
+current_page = st.session_state.page
+wl_count = len(st.session_state.watchlist)
 
-    for key, label, icon_name in NAV_ITEMS:
-        is_active = st.session_state.page == key
-        cols = st.columns([1, 6])
-        with cols[0]:
-            color = "var(--red)" if is_active else "#9a9a9a"
-            render_html(f'<div style="padding-top:9px;">{icon(icon_name, 19, color)}</div>')
-        with cols[1]:
-            if st.button(label, key=f"nav_{key}",
-                         use_container_width=True,
-                         type="primary" if is_active else "secondary"):
-                st.session_state.page = key
-                st.session_state.selected_genre = None
-                st.rerun()
 
-    render_html('<hr class="sidebar-divider">')
+def nav_link(page_key: str, icon_name: str, label: str) -> str:
+    active = "active" if current_page == page_key else ""
+    return (
+        f'<a class="nav-link {active}" href="?page={page_key}" target="_self">'
+        f'{icon(icon_name, 18, "currentColor")}<span>{label}</span>'
+        f'</a>'
+    )
 
-    scols = st.columns([1, 6])
-    with scols[0]:
-        render_html(f'<div style="padding-top:9px;">{icon("search", 19, "#9a9a9a")}</div>')
-    with scols[1]:
-        if st.button("Search", key="nav_search_link", use_container_width=True,
-                     type="primary" if st.session_state.page == "search" else "secondary"):
-            st.session_state.page = "search"
-            st.rerun()
 
-    lcols = st.columns([1, 6])
-    with lcols[0]:
-        render_html(f'<div style="padding-top:9px;">{icon("logout", 19, "#9a9a9a")}</div>')
-    with lcols[1]:
-        st.button("Log Out", key="nav_logout", use_container_width=True)
+render_html(f"""
+<div class="nav-bar">
+    {nav_link("home", "home", "Home")}
+    {nav_link("browse", "search", "Browse")}
+    {nav_link("search", "search", "Search")}
+    {nav_link("watchlist", "favorite", f"My List ({wl_count})")}
+</div>
+""")
 
 
 # ============================================================
@@ -671,7 +653,7 @@ df, sim = build_engine()
 
 
 # ============================================================
-# SHARED RENDER HELPERS
+# RENDER HELPERS
 # ============================================================
 def render_shelf_card(title, poster, rating, year=None):
     poster_html = (
@@ -908,7 +890,7 @@ def render_search():
             if results.empty:
                 st.error(f'No movies found matching "{query}". Try another title.')
             else:
-                render_html(f'<div class="results-heading">Because you liked <em>"{query.title()}"</em></div>')
+                render_html(f'<div style="font-size:24px;font-weight:800;margin:6px 0 22px 0;">Because you liked <em style="color:var(--red);font-style:italic;border-bottom:2px solid var(--red);padding-bottom:2px;">"{query.title()}"</em></div>')
                 cols = st.columns(4)
                 for i, (_, row) in enumerate(results.iterrows()):
                     with cols[i % 4]:
@@ -931,11 +913,6 @@ def render_watchlist():
     n = len(st.session_state.watchlist)
     render_html(f'<div class="watch-count">{n} title{"s" if n != 1 else ""} · Sorted by added date</div>')
 
-    top_l, top_r = st.columns([6, 2])
-    with top_r:
-        st.selectbox("Sort", ["Added (Newest)", "Rating (High to Low)", "Title (A–Z)"],
-                     label_visibility="collapsed", key="wl_sort")
-
     if not st.session_state.watchlist:
         render_html(f"""
             <div class="empty-state">
@@ -948,15 +925,8 @@ def render_watchlist():
         """)
         return
 
-    items = list(st.session_state.watchlist)
-    sort_mode = st.session_state.get("wl_sort", "Added (Newest)")
-    if sort_mode == "Rating (High to Low)":
-        items = sorted(items, key=lambda m: float(m.get("rating") or 0), reverse=True)
-    elif sort_mode == "Title (A–Z)":
-        items = sorted(items, key=lambda m: m["title"].lower())
-
     cols = st.columns(5)
-    for i, m in enumerate(items):
+    for i, m in enumerate(st.session_state.watchlist):
         with cols[i % 5]:
             poster = m.get("poster")
             poster_html = (
@@ -985,31 +955,6 @@ def render_watchlist():
 
 
 # ============================================================
-# PAGE: COLLECTIONS / PROFILE
-# ============================================================
-def render_collections():
-    render_html('<h1 class="page-title">Collections</h1>')
-    render_html('<p class="page-subtitle">Curated groups of titles. Coming soon.</p>')
-    render_html(f"""
-        <div class="empty-state">
-            {icon('video_library', 44, '#444')}
-            <p style="margin-top:16px;font-size:15px;">Collections aren't set up yet.</p>
-        </div>
-    """)
-
-
-def render_profile():
-    render_html('<h1 class="page-title">Profile</h1>')
-    render_html('<p class="page-subtitle">Your account details.</p>')
-    render_html(f"""
-        <div class="empty-state">
-            {icon('person', 44, '#444')}
-            <p style="margin-top:16px;font-size:15px;">Profile settings aren't set up yet.</p>
-        </div>
-    """)
-
-
-# ============================================================
 # ROUTER
 # ============================================================
 PAGES = {
@@ -1017,8 +962,6 @@ PAGES = {
     "browse": render_browse,
     "search": render_search,
     "watchlist": render_watchlist,
-    "collections": render_collections,
-    "profile": render_profile,
 }
 PAGES.get(st.session_state.page, render_browse)()
 
@@ -1027,7 +970,7 @@ PAGES.get(st.session_state.page, render_browse)()
 # FOOTER
 # ============================================================
 render_html(f"""
-    <div style="text-align:center;padding:40px 0 10px;color:#555;font-size:12px;">
-        CINEMATCH · Powered by NLP & TF-IDF · Built with {icon('favorite', 12, '#555')} at TekHer AI Bootcamp
+    <div class="footer">
+        CINEMATCH · Powered by NLP & TF-IDF · Built with {icon('favorite', 12, '#555')} by Justine Umutoni © 2026
     </div>
 """)
