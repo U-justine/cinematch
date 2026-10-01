@@ -1,6 +1,7 @@
 """
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
+Uses Sentence-BERT word embeddings + TF-IDF baseline (toggleable).
 Single-page app with top navigation (no sidebar).
 """
 
@@ -9,6 +10,7 @@ import datetime
 import random
 import textwrap
 import requests
+import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -45,7 +47,6 @@ for key, default in {
 # RENDER HELPER
 # ============================================================
 def render_html(markup: str):
-    """Render HTML reliably by stripping all leading whitespace."""
     st.html(textwrap.dedent(markup).strip())
 
 
@@ -100,7 +101,7 @@ html, body, .stApp {
 .nav-bar {
     display: flex; align-items: center; gap: 4px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 24px; overflow-x: auto;
+    margin-bottom: 20px; overflow-x: auto;
     scrollbar-width: none;
 }
 .nav-bar::-webkit-scrollbar { display: none; }
@@ -120,6 +121,20 @@ html, body, .stApp {
     left: 12px; right: 12px; bottom: 0;
     height: 2px; background: var(--red);
     border-radius: 2px;
+}
+
+/* ENGINE BADGE */
+.engine-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(229,9,20,0.12);
+    border: 1px solid rgba(229,9,20,0.35);
+    color: var(--red);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    margin-bottom: 16px;
 }
 
 /* TITLES */
@@ -334,6 +349,8 @@ ICON_PATHS = {
     "fingerprint": '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     "camera_alt": '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+    "brain": '<path d="M12 5a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V8a3 3 0 0 0-3-3z"/><path d="M5 12a3 3 0 0 1 3-3"/><path d="M19 12a3 3 0 0 0-3-3"/>',
+    "chart": '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
 }
 
 FILLED_ICONS = {"star", "favorite", "bolt", "auto_awesome"}
@@ -476,7 +493,7 @@ def placeholder_bg(seed_text: str) -> str:
 
 
 # ============================================================
-# DATA + NLP ENGINE
+# DATA + NLP ENGINE (TF-IDF + SENTENCE EMBEDDINGS)
 # ============================================================
 DATASET_URL = (
     "https://raw.githubusercontent.com/"
@@ -514,8 +531,14 @@ def _clean(text) -> str:
     return text.lower().strip() if isinstance(text, str) else ""
 
 
-@st.cache_resource(show_spinner="Loading CineMatch engine…")
+@st.cache_resource(show_spinner="Loading CineMatch engine (TF-IDF + embeddings)…")
 def build_engine():
+    """
+    Build TWO similarity engines:
+      1. TF-IDF (baseline) — bag-of-words with inverse document frequency
+      2. Sentence-BERT embeddings — dense 384-d vectors capturing meaning
+    Both use cosine similarity for retrieval.
+    """
     df = load_data().copy()
     df = df.dropna(subset=["title", "overview"])
     df["genres_list"] = df["genres"].apply(_parse_names_titlecase)
@@ -524,16 +547,50 @@ def build_engine():
     df["overview"] = df["overview"].apply(_clean)
     df["soup"] = df["overview"] + " " + df["genres"] + " " + df["keywords"]
 
-    keep = [c for c in ["id", "title", "overview", "genres", "genres_list", "vote_average", "release_date", "soup"] if c in df.columns]
+    keep = [
+        c for c in [
+            "id", "title", "overview", "genres", "genres_list",
+            "vote_average", "release_date", "soup",
+        ] if c in df.columns
+    ]
     df = df[keep].reset_index(drop=True)
 
-    tfidf = TfidfVectorizer(stop_words="english", max_features=5000, ngram_range=(1, 2), min_df=2)
-    matrix = tfidf.fit_transform(df["soup"])
-    sim = cosine_similarity(matrix, matrix)
-    return df, sim
+    # ---------- Engine 1: TF-IDF (baseline) ----------
+    tfidf = TfidfVectorizer(
+        stop_words="english",
+        max_features=5000,
+        ngram_range=(1, 2),
+        min_df=2,
+    )
+    tfidf_matrix = tfidf.fit_transform(df["soup"])
+    tfidf_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+
+    # ---------- Engine 2: Sentence-BERT embeddings (new) ----------
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        # all-MiniLM-L6-v2: 80 MB, fast, great for semantic similarity
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        embeddings = model.encode(
+            df["soup"].tolist(),
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=True,  # so cosine sim == dot product
+        )
+        embed_sim = embeddings @ embeddings.T
+    except Exception as e:
+        st.warning(
+            f"Could not load Sentence-BERT ({e}). "
+            f"Falling back to TF-IDF for both engines."
+        )
+        embeddings = None
+        embed_sim = tfidf_sim
+
+    return df, tfidf_sim, embed_sim, embeddings
 
 
 def recommend(df, sim, title, n=10, genre_filter=None):
+    """Same as before — takes whichever similarity matrix you pass in."""
     title = title.lower().strip()
     matches = df[df["title"].str.lower() == title]
     if matches.empty:
@@ -543,8 +600,10 @@ def recommend(df, sim, title, n=10, genre_filter=None):
     idx = matches.index[0]
     scores = sorted(enumerate(sim[idx]), key=lambda x: x[1], reverse=True)[1: (n * 5) + 1]
     indices = [i for i, _ in scores]
-    result = df.iloc[indices][["id", "title", "overview", "genres", "genres_list", "vote_average", "release_date"]].copy()
-    result["similarity"] = [round(s, 3) for _, s in scores]
+    result = df.iloc[indices][
+        ["id", "title", "overview", "genres", "genres_list", "vote_average", "release_date"]
+    ].copy()
+    result["similarity"] = [round(float(s), 3) for _, s in scores]
     if genre_filter:
         mask = result["genres"].apply(lambda g: any(gen.lower() in g for gen in genre_filter))
         result = result[mask]
@@ -647,9 +706,29 @@ render_html(f"""
 
 
 # ============================================================
-# LOAD ENGINE
+# LOAD BOTH ENGINES
 # ============================================================
-df, sim = build_engine()
+df, tfidf_sim, embed_sim, embeddings = build_engine()
+HAS_EMBEDDINGS = embeddings is not None
+
+
+# ============================================================
+# ENGINE TOGGLE
+# ============================================================
+if HAS_EMBEDDINGS:
+    engine_choice = st.radio(
+        "Recommendation engine",
+        ["Sentence-BERT embeddings", "TF-IDF (baseline)"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="engine_toggle",
+    )
+    USE_EMBEDDINGS = engine_choice.startswith("Sentence")
+else:
+    USE_EMBEDDINGS = False
+
+sim = embed_sim if USE_EMBEDDINGS else tfidf_sim
+engine_badge = "🧠 Embeddings" if USE_EMBEDDINGS else "📊 TF-IDF"
 
 
 # ============================================================
@@ -695,7 +774,7 @@ def render_result_card(row, show_similarity=True):
     match_html = ""
     if show_similarity and sim_val is not None:
         pct = int(sim_val * 100)
-        match_html = f'<span class="match">{pct}% Similar</span>'
+        match_html = f'<span class="match">{pct}% Match</span>'
 
     render_html(f"""
         <div class="result-card">
@@ -847,6 +926,9 @@ def render_browse():
 # PAGE: SEARCH
 # ============================================================
 def render_search():
+    # Show which engine is active
+    render_html(f'<div class="engine-badge">{engine_badge} engine</div>')
+
     col_input, col_btn = st.columns([9, 1])
     with col_input:
         query = st.text_input(
@@ -884,13 +966,17 @@ def render_search():
                 st.session_state.history = st.session_state.history[:5]
             st.session_state.last_search = query
 
-            with st.spinner("Finding your matches…"):
+            with st.spinner(f"Finding matches with {engine_badge}…"):
                 results = recommend(df, sim, query, n=8, genre_filter=st.session_state.genre_filter)
 
             if results.empty:
                 st.error(f'No movies found matching "{query}". Try another title.')
             else:
-                render_html(f'<div style="font-size:24px;font-weight:800;margin:6px 0 22px 0;">Because you liked <em style="color:var(--red);font-style:italic;border-bottom:2px solid var(--red);padding-bottom:2px;">"{query.title()}"</em></div>')
+                render_html(
+                    f'<div style="font-size:24px;font-weight:800;margin:6px 0 22px 0;">'
+                    f'Because you liked <em style="color:var(--red);font-style:italic;'
+                    f'border-bottom:2px solid var(--red);padding-bottom:2px;">"{query.title()}"</em></div>'
+                )
                 cols = st.columns(4)
                 for i, (_, row) in enumerate(results.iterrows()):
                     with cols[i % 4]:
@@ -971,6 +1057,6 @@ PAGES.get(st.session_state.page, render_browse)()
 # ============================================================
 render_html(f"""
     <div class="footer">
-        CINEMATCH · Powered by NLP & TF-IDF · Built with {icon('favorite', 12, '#555')} by Justine Umutoni © 2026
+        CINEMATCH · Powered by NLP + Sentence-BERT embeddings · Built with {icon('favorite', 12, '#555')} by Justine Umutoni © 2026
     </div>
 """)
