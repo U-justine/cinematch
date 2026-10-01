@@ -2,11 +2,13 @@
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
 Single-page app with top navigation (no sidebar).
-Uses dense embeddings (LSA via TruncatedSVD) — no user-facing toggle.
+Dense embeddings (LSA via TruncatedSVD) — no user-facing toggle.
 
-Cache note: poster-fetching functions use a versioned parameter (`v`)
-so that bumping the version invalidates any stale "no poster" results
-cached while the TMDb API key was still invalid.
+Design notes:
+  - Richer hover states on all interactive elements
+  - Micro-interactions (lift, glow, scale, underline animations)
+  - Custom SVG iconography throughout (no external icon font)
+  - Netflix-inspired dark theme with red accents
 """
 
 import ast
@@ -51,25 +53,27 @@ for key, default in {
 # RENDER HELPER
 # ============================================================
 def render_html(markup: str):
-    """Render HTML reliably by stripping all leading whitespace."""
     st.html(textwrap.dedent(markup).strip())
 
 
 # ============================================================
-# CSS — NETFLIX DESIGN
+# CSS — ENHANCED NETFLIX DESIGN
 # ============================================================
 CSS = """
 :root {
     --nf-red: #E50914;
     --nf-red-hover: #F40612;
+    --nf-red-glow: rgba(229,9,20,0.45);
     --nf-black: #141414;
     --nf-dark: #181818;
     --nf-card: #1f1f1f;
+    --nf-card-hover: #262626;
     --nf-border: #2a2a2a;
     --nf-white: #FFFFFF;
     --nf-gray: #b3b3b3;
     --nf-gray-dark: #808080;
     --nf-gold: #f5c518;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 html, body, .stApp {
     background-color: var(--nf-black) !important;
@@ -87,21 +91,27 @@ html, body, .stApp {
     max-width: 1400px !important;
 }
 
-/* ============ HEADER ============ */
+/* ============================================================
+   HEADER
+   ============================================================ */
 .nf-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 14px 8px 14px 8px;
 }
-.nf-brand { display: flex; align-items: center; gap: 8px; }
+.nf-brand { display: flex; align-items: center; gap: 10px; }
 .nf-brand-logo {
-    font-size: 26px;
+    font-size: 27px;
     font-weight: 900;
     color: var(--nf-red);
-    letter-spacing: -1.2px;
+    letter-spacing: -1.3px;
     text-transform: uppercase;
     line-height: 1;
+    transition: text-shadow 0.3s var(--ease);
+}
+.nf-brand-logo:hover {
+    text-shadow: 0 0 18px var(--nf-red-glow);
 }
 .nf-header-icons {
     display: flex;
@@ -109,14 +119,42 @@ html, body, .stApp {
     gap: 20px;
     color: var(--nf-white);
 }
+.nf-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    transition: background 0.25s var(--ease), transform 0.2s var(--ease);
+    cursor: pointer;
+}
+.nf-icon-btn:hover {
+    background: rgba(255,255,255,0.08);
+    transform: scale(1.08);
+}
 .nf-avatar {
-    width: 32px; height: 32px; border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
     background: linear-gradient(135deg, #E50914 0%, #7a0009 100%);
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: 800; font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 800;
+    font-size: 14px;
+    transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
+    cursor: pointer;
+}
+.nf-avatar:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 2px var(--nf-red);
 }
 
-/* ============ NAV ============ */
+/* ============================================================
+   NAV
+   ============================================================ */
 .nf-nav {
     display: flex;
     align-items: center;
@@ -132,27 +170,48 @@ html, body, .stApp {
     color: var(--nf-gray) !important;
     font-size: 14.5px !important;
     font-weight: 500 !important;
-    padding: 4px 0 !important;
+    padding: 6px 0 !important;
     margin: 0 !important;
     width: auto !important;
     min-width: 0 !important;
     box-shadow: none !important;
     text-align: left !important;
     letter-spacing: 0.2px !important;
+    position: relative !important;
+    transition: color 0.25s var(--ease) !important;
+}
+.nf-nav .stButton > button::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 3px;
+    background: var(--nf-red);
+    border-radius: 2px;
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 0.28s var(--ease);
 }
 .nf-nav .stButton > button:hover {
     color: var(--nf-white) !important;
     background: transparent !important;
 }
+.nf-nav .stButton > button:hover::after {
+    transform: scaleX(0.5);
+    opacity: 0.6;
+}
 .nf-nav .stButton > button[kind="primary"] {
     color: var(--nf-white) !important;
     font-weight: 700 !important;
-    border-bottom: 3px solid var(--nf-red) !important;
-    padding-bottom: 6px !important;
+}
+.nf-nav .stButton > button[kind="primary"]::after {
+    transform: scaleX(1);
 }
 
-/* ============ HERO ============ */
+/* ============================================================
+   HERO
+   ============================================================ */
 .nf-hero {
+    position: relative;
     background: linear-gradient(90deg,
         rgba(20,20,20,0.95) 0%,
         rgba(20,20,20,0.75) 40%,
@@ -167,6 +226,19 @@ html, body, .stApp {
     flex-direction: column;
     justify-content: center;
     border: 1px solid rgba(229,9,20,0.15);
+    overflow: hidden;
+}
+.nf-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 20% 40%,
+        rgba(229,9,20,0.18) 0%, transparent 55%);
+    pointer-events: none;
+    transition: opacity 0.4s var(--ease);
+}
+.nf-hero:hover::before {
+    opacity: 0.7;
 }
 .nf-hero-badge {
     display: inline-flex; align-items: center; gap: 6px;
@@ -180,6 +252,11 @@ html, body, .stApp {
     text-transform: uppercase;
     margin-bottom: 16px;
     width: fit-content;
+    transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+.nf-hero:hover .nf-hero-badge {
+    background: rgba(229,9,20,0.25);
+    border-color: var(--nf-red);
 }
 .nf-hero-title {
     font-size: 52px; font-weight: 900;
@@ -197,7 +274,9 @@ html, body, .stApp {
     margin: 0;
 }
 
-/* ============ SECTIONS ============ */
+/* ============================================================
+   SECTIONS
+   ============================================================ */
 .nf-section {
     display: flex; align-items: center; gap: 10px;
     font-size: 23px; font-weight: 800;
@@ -209,9 +288,15 @@ html, body, .stApp {
     width: 4px; height: 22px;
     background: var(--nf-red);
     border-radius: 2px;
+    transition: height 0.3s var(--ease);
+}
+.nf-section:hover .nf-section-accent {
+    height: 26px;
 }
 
-/* ============ GENRE CARDS ============ */
+/* ============================================================
+   GENRE CARDS
+   ============================================================ */
 .nf-genre-card {
     position: relative;
     height: 160px;
@@ -220,12 +305,15 @@ html, body, .stApp {
     background-size: cover;
     background-position: center;
     border: 2px solid transparent;
-    transition: transform 0.22s ease, border-color 0.22s ease;
+    transition: transform 0.28s var(--ease),
+                border-color 0.28s var(--ease),
+                box-shadow 0.28s var(--ease);
     display: flex;
     align-items: flex-end;
     padding: 16px;
     color: white;
     margin-bottom: 4px;
+    cursor: pointer;
 }
 .nf-genre-card::before {
     content: '';
@@ -235,13 +323,28 @@ html, body, .stApp {
         rgba(0,0,0,0.2) 60%,
         rgba(0,0,0,0.1) 100%);
     z-index: 1;
+    transition: opacity 0.3s var(--ease);
 }
 .nf-genre-card:hover {
-    transform: scale(1.02);
+    transform: translateY(-4px) scale(1.02);
     border-color: var(--nf-red);
+    box-shadow: 0 14px 36px rgba(229,9,20,0.35);
+}
+.nf-genre-card:hover::before {
+    background: linear-gradient(to top,
+        rgba(0,0,0,0.92) 8%,
+        rgba(0,0,0,0.35) 60%,
+        rgba(0,0,0,0.2) 100%);
 }
 .nf-genre-content { position: relative; z-index: 2; width: 100%; }
-.nf-genre-icon { margin-bottom: 8px; display: block; }
+.nf-genre-icon {
+    margin-bottom: 8px;
+    display: block;
+    transition: transform 0.3s var(--ease);
+}
+.nf-genre-card:hover .nf-genre-icon {
+    transform: scale(1.15) translateY(-2px);
+}
 .nf-genre-name {
     font-size: 19px; font-weight: 800;
     margin: 0; letter-spacing: -0.2px;
@@ -256,39 +359,94 @@ html, body, .stApp {
 .nf-genre-count .dot {
     width: 5px; height: 5px; border-radius: 50%;
     background: var(--nf-red); display: inline-block;
+    transition: transform 0.3s var(--ease);
+}
+.nf-genre-card:hover .nf-genre-count .dot {
+    transform: scale(1.5);
+    box-shadow: 0 0 8px var(--nf-red);
 }
 
-/* ============ RESULT CARDS ============ */
+/* ============================================================
+   RESULT CARDS
+   ============================================================ */
 .nf-result-card {
     position: relative;
     background: var(--nf-card);
     border-radius: 8px;
     overflow: hidden;
-    transition: transform 0.22s ease, box-shadow 0.22s ease;
+    transition: transform 0.28s var(--ease),
+                box-shadow 0.28s var(--ease),
+                background 0.28s var(--ease),
+                border-color 0.28s var(--ease);
     margin-bottom: 4px;
     border: 1px solid rgba(255,255,255,0.04);
 }
 .nf-result-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
-    border-color: rgba(229,9,20,0.4);
+    transform: translateY(-5px);
+    background: var(--nf-card-hover);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6),
+                0 0 0 1px rgba(229,9,20,0.5);
+    border-color: rgba(229,9,20,0.5);
 }
-.nf-result-poster-wrap { position: relative; overflow: hidden; }
+.nf-result-poster-wrap {
+    position: relative;
+    overflow: hidden;
+    background: #0a0a0a;
+}
 .nf-result-poster {
-    width: 100%; aspect-ratio: 16 / 10;
-    object-fit: cover; display: block;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    display: block;
     background: #111;
-    transition: transform 0.35s ease;
+    transition: transform 0.4s var(--ease), filter 0.4s var(--ease);
 }
-.nf-result-card:hover .nf-result-poster { transform: scale(1.05); }
+.nf-result-card:hover .nf-result-poster {
+    transform: scale(1.08);
+    filter: brightness(1.08);
+}
 .nf-result-overlay {
     position: absolute; top: 10px; right: 10px;
-    background: rgba(0,0,0,0.75);
-    backdrop-filter: blur(6px);
+    background: rgba(0,0,0,0.78);
+    backdrop-filter: blur(8px);
     color: var(--nf-gold);
-    padding: 4px 8px; border-radius: 4px;
+    padding: 4px 9px; border-radius: 4px;
     font-size: 11.5px; font-weight: 800;
     display: flex; align-items: center; gap: 3px;
+    transition: transform 0.28s var(--ease), background 0.28s var(--ease);
+}
+.nf-result-card:hover .nf-result-overlay {
+    transform: scale(1.08);
+    background: rgba(0,0,0,0.9);
+}
+.nf-result-play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s var(--ease);
+    pointer-events: none;
+}
+.nf-result-card:hover .nf-result-play {
+    opacity: 1;
+}
+.nf-play-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(229,9,20,0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 6px 20px rgba(229,9,20,0.5);
+    transform: scale(0.85);
+    transition: transform 0.3s var(--ease);
+}
+.nf-result-card:hover .nf-play-btn {
+    transform: scale(1);
 }
 .nf-result-body { padding: 14px 15px 16px; min-height: 118px; }
 .nf-result-title {
@@ -297,6 +455,10 @@ html, body, .stApp {
     margin: 0 0 3px 0; line-height: 1.25;
     display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden;
+    transition: color 0.2s var(--ease);
+}
+.nf-result-card:hover .nf-result-title {
+    color: #fff;
 }
 .nf-result-meta {
     display: flex; align-items: center; gap: 10px;
@@ -307,6 +469,10 @@ html, body, .stApp {
 .nf-result-match {
     color: var(--nf-red);
     display: inline-flex; align-items: center; gap: 3px;
+    transition: transform 0.25s var(--ease);
+}
+.nf-result-card:hover .nf-result-match {
+    transform: translateX(2px);
 }
 .nf-result-overview {
     font-size: 12.5px; color: var(--nf-gray);
@@ -315,7 +481,9 @@ html, body, .stApp {
     -webkit-box-orient: vertical; overflow: hidden;
 }
 
-/* ============ SHELF ============ */
+/* ============================================================
+   SHELF
+   ============================================================ */
 .nf-shelf {
     display: flex; gap: 12px;
     overflow-x: auto;
@@ -330,18 +498,27 @@ html, body, .stApp {
     flex: 0 0 155px;
     background: var(--nf-card);
     border-radius: 8px; overflow: hidden;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    transition: transform 0.28s var(--ease),
+                box-shadow 0.28s var(--ease),
+                border-color 0.28s var(--ease);
     border: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer;
 }
 .nf-shelf-card:hover {
-    transform: scale(1.06);
-    box-shadow: 0 12px 30px rgba(229,9,20,0.25);
-    border-color: rgba(229,9,20,0.5);
+    transform: translateY(-6px) scale(1.04);
+    box-shadow: 0 18px 40px rgba(229,9,20,0.35);
+    border-color: var(--nf-red);
 }
+.nf-shelf-poster-wrap { position: relative; overflow: hidden; }
 .nf-shelf-poster {
     width: 100%; aspect-ratio: 2 / 3;
     object-fit: cover; background: #111;
     display: block;
+    transition: transform 0.4s var(--ease), filter 0.4s var(--ease);
+}
+.nf-shelf-card:hover .nf-shelf-poster {
+    transform: scale(1.06);
+    filter: brightness(1.1);
 }
 .nf-shelf-info { padding: 10px 11px 12px; }
 .nf-shelf-title {
@@ -356,21 +533,40 @@ html, body, .stApp {
     display: flex; align-items: center; gap: 4px;
 }
 
-/* ============ MOTD ============ */
+/* ============================================================
+   MOVIE OF THE DAY
+   ============================================================ */
 .nf-motd {
     display: flex; gap: 26px;
     background: linear-gradient(135deg, #1f1f1f 0%, #161616 100%);
-    border-radius: 12px; padding: 26px;
+    border-radius: 12px;
+    padding: 26px;
     margin-bottom: 12px;
     border-left: 4px solid var(--nf-red);
     border-top: 1px solid rgba(255,255,255,0.04);
     border-right: 1px solid rgba(255,255,255,0.04);
     border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+}
+.nf-motd:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.5);
+}
+.nf-motd-poster-wrap {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    flex-shrink: 0;
 }
 .nf-motd-poster {
-    width: 130px; min-width: 130px; height: 195px;
-    object-fit: cover; border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    width: 130px; height: 195px;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.4s var(--ease);
+}
+.nf-motd:hover .nf-motd-poster {
+    transform: scale(1.05);
 }
 .nf-motd-label {
     color: var(--nf-red);
@@ -394,7 +590,9 @@ html, body, .stApp {
     line-height: 1.6;
 }
 
-/* ============ WATCHLIST ============ */
+/* ============================================================
+   WATCHLIST
+   ============================================================ */
 .nf-watch-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -403,18 +601,28 @@ html, body, .stApp {
 }
 .nf-watch-card {
     position: relative;
-    transition: transform 0.22s ease;
+    transition: transform 0.28s var(--ease);
 }
-.nf-watch-card:hover { transform: translateY(-4px); }
+.nf-watch-card:hover {
+    transform: translateY(-6px);
+}
 .nf-watch-poster-wrap {
     position: relative; border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    transition: box-shadow 0.3s var(--ease);
+}
+.nf-watch-card:hover .nf-watch-poster-wrap {
+    box-shadow: 0 14px 36px rgba(229,9,20,0.35);
 }
 .nf-watch-poster {
     width: 100%; aspect-ratio: 2 / 3;
     object-fit: cover; display: block;
     background: #111;
+    transition: transform 0.4s var(--ease);
+}
+.nf-watch-card:hover .nf-watch-poster {
+    transform: scale(1.05);
 }
 .nf-watch-rating {
     position: absolute; top: 10px; left: 10px;
@@ -424,6 +632,10 @@ html, body, .stApp {
     font-size: 12px; font-weight: 800;
     color: var(--nf-gold);
     display: flex; align-items: center; gap: 3px;
+    transition: transform 0.25s var(--ease);
+}
+.nf-watch-card:hover .nf-watch-rating {
+    transform: scale(1.06);
 }
 .nf-watch-remove {
     position: absolute; top: 10px; right: 10px;
@@ -431,6 +643,14 @@ html, body, .stApp {
     background: rgba(229,9,20,0.95);
     display: flex; align-items: center; justify-content: center;
     color: white; font-weight: 900; font-size: 14px;
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.85);
+    transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+.nf-watch-card:hover .nf-watch-remove {
+    opacity: 1;
+    transform: scale(1);
 }
 .nf-watch-title {
     font-size: 13.5px; font-weight: 800;
@@ -444,7 +664,9 @@ html, body, .stApp {
     color: var(--nf-gray-dark);
 }
 
-/* ============ EMPTY STATE ============ */
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
 .nf-empty {
     padding: 64px 24px; border-radius: 12px;
     background: linear-gradient(135deg, #1a1a1a 0%, #141414 100%);
@@ -455,13 +677,20 @@ html, body, .stApp {
     color: var(--nf-gray-dark);
     opacity: 0.5; margin-bottom: 18px;
     display: inline-block;
+    transition: transform 0.3s var(--ease), opacity 0.3s var(--ease);
+}
+.nf-empty:hover .nf-empty-icon {
+    transform: scale(1.1);
+    opacity: 0.7;
 }
 .nf-empty-text {
     font-size: 15px; line-height: 1.6;
     max-width: 400px; margin: 0 auto;
 }
 
-/* ============ BUTTONS ============ */
+/* ============================================================
+   BUTTONS
+   ============================================================ */
 .stButton > button {
     background-color: var(--nf-red) !important;
     color: white !important;
@@ -471,12 +700,23 @@ html, body, .stApp {
     font-weight: 700 !important;
     font-size: 13.5px !important;
     letter-spacing: 0.3px !important;
-    transition: background 0.2s ease !important;
+    transition: transform 0.2s var(--ease),
+                background 0.2s var(--ease),
+                box-shadow 0.25s var(--ease) !important;
     width: 100%;
 }
-.stButton > button:hover { background-color: var(--nf-red-hover) !important; }
+.stButton > button:hover {
+    background-color: var(--nf-red-hover) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(229,9,20,0.35);
+}
+.stButton > button:active {
+    transform: translateY(0) scale(0.98);
+}
 
-/* ============ INPUTS ============ */
+/* ============================================================
+   INPUTS
+   ============================================================ */
 .stTextInput > div > div > input {
     background-color: #1a1a1a !important;
     border: 1px solid #333 !important;
@@ -484,6 +724,7 @@ html, body, .stApp {
     border-radius: 6px !important;
     padding: 14px 18px !important;
     font-size: 15px !important;
+    transition: border-color 0.25s var(--ease), box-shadow 0.25s var(--ease) !important;
 }
 .stTextInput > div > div > input:focus {
     border-color: var(--nf-red) !important;
@@ -496,9 +737,16 @@ html, body, .stApp {
     border: 1px solid #333 !important;
     border-radius: 6px !important;
     color: white !important;
+    transition: border-color 0.25s var(--ease) !important;
+}
+.stSelectbox > div > div:hover,
+.stMultiSelect > div > div:hover {
+    border-color: var(--nf-red) !important;
 }
 
-/* ============ FOOTER ============ */
+/* ============================================================
+   FOOTER
+   ============================================================ */
 .nf-footer {
     text-align: center;
     padding: 48px 0 12px;
@@ -507,7 +755,9 @@ html, body, .stApp {
 }
 .nf-footer-accent { color: var(--nf-red); font-weight: 700; }
 
-/* ============ RESPONSIVE ============ */
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
 @media (max-width: 900px) {
     .nf-hero { padding: 40px 28px; min-height: 220px; }
     .nf-hero-title { font-size: 38px; letter-spacing: -1px; }
@@ -569,9 +819,10 @@ ICON_PATHS = {
     "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     "camera_alt": '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     "bell": '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    "play": '<polygon points="6 4 20 12 6 20 6 4"/>',
 }
 
-FILLED_ICONS = {"star", "favorite", "bolt", "auto_awesome", "bell"}
+FILLED_ICONS = {"star", "favorite", "bolt", "auto_awesome", "bell", "play"}
 
 
 def icon(name: str, size: int = 20, color: str = "currentColor") -> str:
@@ -591,9 +842,9 @@ def icon(name: str, size: int = 20, color: str = "currentColor") -> str:
 
 
 # ============================================================
-# TMDb API — with cache-busting version parameter
+# TMDb API — with cache-busting version
 # ============================================================
-CACHE_VERSION = 3   # bump to invalidate stale poster caches
+CACHE_VERSION = 3
 
 
 def get_tmdb_key():
@@ -704,7 +955,6 @@ def fetch_genre_backdrop(genre_name: str, v: int = CACHE_VERSION):
 
 
 def get_poster(movie_id=None, title=None) -> str | None:
-    """Try id-based lookup first (more reliable), then title fallback."""
     p = fetch_poster_by_id(movie_id) if movie_id else None
     if not p and title:
         p = fetch_poster_by_title(title)
@@ -762,12 +1012,6 @@ def _clean(text) -> str:
 
 @st.cache_resource(show_spinner="Loading CineMatch engine…")
 def build_engine():
-    """
-    Build dense-vector embeddings using LSA (TruncatedSVD).
-      1. TF-IDF vectorize each movie's text.
-      2. Compress sparse matrix → 200 dense dimensions (captures semantics).
-      3. Normalize so cosine similarity == dot product.
-    """
     df = load_data().copy()
     df = df.dropna(subset=["title", "overview"])
     df["genres_list"] = df["genres"].apply(_parse_names_titlecase)
@@ -785,15 +1029,13 @@ def build_engine():
     df = df[keep].reset_index(drop=True)
 
     tfidf = TfidfVectorizer(
-        stop_words="english",
-        max_features=8000,
-        ngram_range=(1, 2),
-        min_df=2,
+        stop_words="english", max_features=8000,
+        ngram_range=(1, 2), min_df=2,
     )
     tfidf_matrix = tfidf.fit_transform(df["soup"])
 
-    n_components = min(200, tfidf_matrix.shape[1] - 1)
-    svd = TruncatedSVD(n_components=n_components, random_state=42)
+    npage_components = min(200_key, tfidf_matrix.shape,[1] - 1)
+    sv labeld = TruncatedSVD(n_components=n_components, random_state=42)
     dense = svd.fit_transform(tfidf_matrix)
 
     norms = np.linalg.norm(dense, axis=1, keepdims=True)
@@ -893,8 +1135,8 @@ render_html(f"""
         <div class="nf-brand-logo">CineMatch</div>
     </div>
     <div class="nf-header-icons">
-        {icon('search', 20, '#fff')}
-        {icon('bell', 20, '#fff')}
+        <div class="nf-icon-btn">{icon('search', 20, '#fff')}</div>
+        <div class="nf-icon-btn">{icon('bell', 20, '#fff')}</div>
         <div class="nf-avatar">JU</div>
     </div>
 </div>
@@ -902,7 +1144,7 @@ render_html(f"""
 
 
 # ============================================================
-# NAV — native Streamlit buttons styled as Netflix nav
+# NAV
 # ============================================================
 NAV_ITEMS = [
     ("home", "Home"),
@@ -912,12 +1154,11 @@ NAV_ITEMS = [
 ]
 
 nav_cols = st.columns([1, 1, 1, 1, 5])
-for i, (page_key, label) in enumerate(NAV_ITEMS):
+for i, () in enumerate(NAV_ITEMS):
     with nav_cols[i]:
         is_active = st.session_state.page == page_key
         if st.button(
-            label,
-            key=f"nav_{page_key}",
+            label, key=f"nav_{page_key}",
             use_container_width=True,
             type="primary" if is_active else "secondary",
         ):
@@ -946,7 +1187,7 @@ def render_shelf_card(title, poster, rating, year=None):
     year_txt = f" · {year}" if year else ""
     return f"""
     <div class="nf-shelf-card">
-        {poster_html}
+        <div class="nf-shelf-poster-wrap">{poster_html}</div>
         <div class="nf-shelf-info">
             <div class="nf-shelf-title">{title}</div>
             <div class="nf-shelf-meta">{icon('star', 11, 'var(--nf-gold)')} {rating:.1f}{year_txt}</div>
@@ -981,7 +1222,12 @@ def render_result_card(row, show_similarity=True):
         <div class="nf-result-card">
             <div class="nf-result-poster-wrap">
                 {poster_html}
-                <div class="nf-result-overlay">{icon('star', 11, 'var(--nf-gold)')} {rating:.1f}</div>
+                <div class="nf-result-play">
+                    <div class="nf-play-btn">{icon('play', 20, 'white')}</div>
+                </div>
+                <div class="nf-result-overlay">
+                    {icon('star', 11, 'var(--nf-gold)')} {rating:.1f}
+                </div>
             </div>
             <div class="nf-result-body">
                 <div class="nf-result-title">{row['title']}</div>
@@ -1044,7 +1290,7 @@ def render_home():
         year = str(motd.get("release_date") or "")[:4]
         render_html(f"""
             <div class="nf-motd">
-                {poster_html}
+                <div class="nf-motd-poster-wrap">{poster_html}</div>
                 <div style="flex:1;min-width:0;">
                     <div class="nf-motd-label">
                         {icon('auto_awesome', 12, 'var(--nf-red)')} PICKED FOR TODAY
