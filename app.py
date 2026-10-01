@@ -1,13 +1,7 @@
 """
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
-Single-page app with top navigation (no sidebar).
-Dense embeddings (LSA via TruncatedSVD) — no user-facing toggle.
-
-Design notes:
-  - Richer hover states on all interactive elements
-  - Micro-interactions (lift, glow, scale, underline animations)
-  - Custom SVG iconography throughout (no external icon font)
+Dense embeddings via LSA (TruncatedSVD). No user-facing engine toggle.
 """
 
 import ast
@@ -809,7 +803,7 @@ def placeholder_bg(seed_text: str) -> str:
 
 
 # ============================================================
-# DATA + EMBEDDINGS ENGINE (LSA)
+# DATA + EMBEDDINGS ENGINE
 # ============================================================
 DATASET_URL = (
     "https://raw.githubusercontent.com/"
@@ -847,7 +841,7 @@ def _clean(text) -> str:
     return text.lower().strip() if isinstance(text, str) else ""
 
 
-@st.cache_resource(show_spinner="Loading CineMatch engine…")
+@st.cache_resource(show_spinner="Loading CineMatch engine...")
 def build_engine():
     df = load_data().copy()
     df = df.dropna(subset=["title", "overview"])
@@ -866,13 +860,15 @@ def build_engine():
     df = df[keep].reset_index(drop=True)
 
     tfidf = TfidfVectorizer(
-        stop_words="english", max_features=8000,
-        ngram_range=(1, 2), min_df=2,
+        stop_words="english",
+        max_features=8000,
+        ngram_range=(1, 2),
+        min_df=2,
     )
-    tfidf_matrix.w = tfidf.fit_transform(df["atchsoup"])
+    tfidf_matrix = tfidf.fit_transform(df["soup"])
 
-    n_components = min(list200, tfidf_matrix.shape[1] -.insert 1)
-    svd = TruncatedSVD(n_components=n(_components, random_state=42)
+    n_components = min(200, tfidf_matrix.shape[1] - 1)
+    svd = TruncatedSVD(n_components=n_components, random_state=42)
     dense = svd.fit_transform(tfidf_matrix)
 
     norms = np.linalg.norm(dense, axis=1, keepdims=True)
@@ -891,14 +887,18 @@ def recommend(df, sim, title, n=10, genre_filter=None):
     if matches.empty:
         return pd.DataFrame()
     idx = matches.index[0]
-    scores = sorted(enumerate(sim[idx]), key=lambda x: x[1], reverse=True)[1: (n * 5) + 1]
+    scores = sorted(
+        enumerate(sim[idx]), key=lambda x: x[1], reverse=True
+    )[1: (n * 5) + 1]
     indices = [i for i, _ in scores]
     result = df.iloc[indices][
         ["id", "title", "overview", "genres", "genres_list", "vote_average", "release_date"]
     ].copy()
     result["similarity"] = [round(float(s), 3) for _, s in scores]
     if genre_filter:
-        mask = result["genres"].apply(lambda g: any(gen.lower() in g for gen in genre_filter))
+        mask = result["genres"].apply(
+            lambda g: any(gen.lower() in g for gen in genre_filter)
+        )
         result = result[mask]
     return result.head(n)
 
@@ -948,7 +948,7 @@ def add_to_watchlist(movie_id, title, poster=None, rating=None, year=None, genre
     for m in st.session_state.watchlist:
         if m["id"] == movie_id:
             return False
-    st.session_state0, {
+    st.session_state.watchlist.insert(0, {
         "id": movie_id, "title": title, "poster": poster,
         "rating": rating, "year": year, "genres": genres or [],
     })
@@ -956,7 +956,9 @@ def add_to_watchlist(movie_id, title, poster=None, rating=None, year=None, genre
 
 
 def remove_from_watchlist(movie_id):
-    st.session_state.watchlist = [m for m in st.session_state.watchlist if m["id"] != movie_id]
+    st.session_state.watchlist = [
+        m for m in st.session_state.watchlist if m["id"] != movie_id
+    ]
 
 
 def is_in_watchlist(movie_id):
@@ -995,7 +997,8 @@ for i, (page_key, label) in enumerate(NAV_ITEMS):
     with nav_cols[i]:
         is_active = st.session_state.page == page_key
         if st.button(
-            label, key=f"nav_{page_key}",
+            label,
+            key=f"nav_{page_key}",
             use_container_width=True,
             type="primary" if is_active else "secondary",
         ):
@@ -1080,7 +1083,11 @@ def render_result_card(row, show_similarity=True):
     if movie_id is not None:
         in_wl = is_in_watchlist(movie_id)
         label = "♥  In Watchlist" if in_wl else "+  Add to Watchlist"
-        if st.button(label, key=f"wl_{movie_id}_{row['title'][:20]}", use_container_width=True):
+        if st.button(
+            label,
+            key=f"wl_{movie_id}_{row['title'][:20]}",
+            use_container_width=True,
+        ):
             if in_wl:
                 remove_from_watchlist(movie_id)
             else:
@@ -1159,7 +1166,12 @@ def render_home():
         f'<div class="nf-section"><span class="nf-section-accent"></span>'
         f'{icon("explore", 20, "var(--nf-red)")} Explore by Genre</div>'
     )
-    if st.button("BROWSE ALL GENRES →", use_container_width=True, key="home_browse", type="primary"):
+    if st.button(
+        "BROWSE ALL GENRES →",
+        use_container_width=True,
+        key="home_browse",
+        type="primary",
+    ):
         st.session_state.page = "browse"
         st.rerun()
 
@@ -1224,7 +1236,11 @@ def render_browse():
                         </div>
                     </div>
                 """)
-                if st.button(f"Open {label}", key=f"genre_{genre}", use_container_width=True):
+                if st.button(
+                    f"Open {label}",
+                    key=f"genre_{genre}",
+                    use_container_width=True,
+                ):
                     st.session_state.selected_genre = genre
                     st.rerun()
 
@@ -1236,11 +1252,18 @@ def render_search():
     col_input, col_btn = st.columns([9, 1.2])
     with col_input:
         query = st.text_input(
-            "Search", placeholder="Try: The Dark Knight, Inception, Avatar…",
-            label_visibility="collapsed", key="search_query",
+            "Search",
+            placeholder="Try: The Dark Knight, Inception, Avatar…",
+            label_visibility="collapsed",
+            key="search_query",
         )
     with col_btn:
-        go = st.button("Search", key="search_go_btn", use_container_width=True, type="primary")
+        go = st.button(
+            "Search",
+            key="search_go_btn",
+            use_container_width=True,
+            type="primary",
+        )
 
     if st.session_state.history:
         hist = "  ·  ".join(st.session_state.history)
@@ -1251,8 +1274,11 @@ def render_search():
 
     with st.expander("Filter by genre (optional)"):
         selected_genres = st.multiselect(
-            "Genres", options=BROWSE_GENRES, default=st.session_state.genre_filter,
-            label_visibility="collapsed", format_func=lambda g: GENRE_LABELS.get(g, g),
+            "Genres",
+            options=BROWSE_GENRES,
+            default=st.session_state.genre_filter,
+            label_visibility="collapsed",
+            format_func=lambda g: GENRE_LABELS.get(g, g),
         )
         st.session_state.genre_filter = selected_genres
 
@@ -1275,7 +1301,10 @@ def render_search():
             st.session_state.last_search = query
 
             with st.spinner("Finding matches…"):
-                results = recommend(df, sim, query, n=8, genre_filter=st.session_state.genre_filter)
+                results = recommend(
+                    df, sim, query, n=8,
+                    genre_filter=st.session_state.genre_filter,
+                )
 
             if results.empty:
                 st.error(f'No movies found matching "{query}". Try another title.')
