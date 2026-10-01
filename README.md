@@ -4,6 +4,7 @@
 
 A Netflix-inspired movie recommendation system built with Python, Streamlit, and NLP.
 
+demo link: https://cinematch-qqff6lebx95s9rvs5nypxe.streamlit.app/ 
 ---
 
 ## Overview
