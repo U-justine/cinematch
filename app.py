@@ -1,8 +1,8 @@
 """
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
-Two engines: TF-IDF (baseline) vs. Dense Embeddings (TruncatedSVD / LSA).
-Single-page app with top navigation — Netflix-inspired dark theme.
+Single-page app with top navigation (no sidebar).
+Uses dense embeddings (LSA) by default — no user-facing toggle.
 """
 
 import ast
@@ -33,13 +33,12 @@ st.set_page_config(
 # SESSION STATE
 # ============================================================
 for key, default in {
-    "page": "browse",
+    "page": "home",
     "watchlist": [],
     "history": [],
     "genre_filter": [],
     "selected_genre": None,
     "last_search": None,
-    "engine": "embeddings",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -62,26 +61,22 @@ CSS = """
     --nf-black: #141414;
     --nf-dark: #181818;
     --nf-card: #1f1f1f;
-    --nf-card-hover: #2a2a2a;
     --nf-border: #2a2a2a;
     --nf-white: #FFFFFF;
     --nf-gray: #b3b3b3;
     --nf-gray-dark: #808080;
     --nf-gold: #f5c518;
 }
-
 html, body, .stApp {
     background-color: var(--nf-black) !important;
     color: var(--nf-white);
     font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
 }
-
 #MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; height: 0; }
 [data-testid="stToolbar"] { display: none; }
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
-
 .block-container {
     padding-top: 1rem !important;
     padding-bottom: 3rem !important;
@@ -94,13 +89,8 @@ html, body, .stApp {
     align-items: center;
     justify-content: space-between;
     padding: 14px 8px 14px 8px;
-    margin-bottom: 0;
 }
-.nf-brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
+.nf-brand { display: flex; align-items: center; gap: 8px; }
 .nf-brand-logo {
     font-size: 26px;
     font-weight: 900;
@@ -116,16 +106,10 @@ html, body, .stApp {
     color: var(--nf-white);
 }
 .nf-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 4px;
+    width: 32px; height: 32px; border-radius: 4px;
     background: linear-gradient(135deg, #E50914 0%, #7a0009 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: 800;
-    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 800; font-size: 14px;
 }
 
 /* ================= NAV ================= */
@@ -136,43 +120,42 @@ html, body, .stApp {
     padding: 6px 8px 14px 8px;
     border-bottom: 1px solid rgba(255,255,255,0.06);
     margin-bottom: 28px;
-    overflow-x: auto;
-    scrollbar-width: none;
 }
-.nf-nav::-webkit-scrollbar { display: none; }
-.nf-nav-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+
+/* Native Streamlit button styled like a Netflix nav link */
+.nf-nav .stButton > button {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
     color: var(--nf-gray) !important;
-    text-decoration: none !important;
-    font-size: 14.5px;
-    font-weight: 500;
-    letter-spacing: 0.2px;
-    white-space: nowrap;
-    position: relative;
-    padding: 4px 0;
-    transition: color 0.2s ease;
+    font-size: 14.5px !important;
+    font-weight: 500 !important;
+    padding: 4px 0 !important;
+    margin: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    box-shadow: none !important;
+    text-align: left !important;
+    letter-spacing: 0.2px !important;
 }
-.nf-nav-link:hover { color: var(--nf-white) !important; }
-.nf-nav-link.active {
+.nf-nav .stButton > button:hover {
     color: var(--nf-white) !important;
-    font-weight: 700;
+    background: transparent !important;
 }
-.nf-nav-link.active::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -16px;
-    height: 3px;
-    background: var(--nf-red);
-    border-radius: 2px;
+.nf-nav .stButton > button:focus:not(:active) {
+    color: var(--nf-white) !important;
+    background: transparent !important;
+}
+/* Active state via kind=primary */
+.nf-nav .stButton > button[kind="primary"] {
+    color: var(--nf-white) !important;
+    font-weight: 700 !important;
+    border-bottom: 3px solid var(--nf-red) !important;
+    padding-bottom: 6px !important;
 }
 
 /* ================= HERO ================= */
 .nf-hero {
-    position: relative;
     background: linear-gradient(90deg,
         rgba(20,20,20,0.95) 0%,
         rgba(20,20,20,0.75) 40%,
@@ -189,24 +172,20 @@ html, body, .stApp {
     border: 1px solid rgba(229,9,20,0.15);
 }
 .nf-hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    display: inline-flex; align-items: center; gap: 6px;
     background: rgba(229,9,20,0.15);
     border: 1px solid rgba(229,9,20,0.4);
     color: var(--nf-red);
     padding: 5px 12px;
     border-radius: 20px;
-    font-size: 11.5px;
-    font-weight: 800;
+    font-size: 11.5px; font-weight: 800;
     letter-spacing: 1.2px;
     text-transform: uppercase;
     margin-bottom: 16px;
     width: fit-content;
 }
 .nf-hero-title {
-    font-size: 52px;
-    font-weight: 900;
+    font-size: 52px; font-weight: 900;
     color: var(--nf-white);
     margin: 0 0 14px 0;
     line-height: 1.05;
@@ -221,31 +200,21 @@ html, body, .stApp {
     margin: 0;
 }
 
-/* ================= SECTION TITLE ================= */
+/* ================= SECTIONS ================= */
 .nf-section {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 23px;
-    font-weight: 800;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 23px; font-weight: 800;
     color: var(--nf-white);
     margin: 36px 0 16px 0;
     letter-spacing: -0.3px;
 }
 .nf-section-accent {
-    width: 4px;
-    height: 22px;
+    width: 4px; height: 22px;
     background: var(--nf-red);
     border-radius: 2px;
 }
 
 /* ================= GENRE CARDS ================= */
-.nf-genre-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 14px;
-    margin-top: 8px;
-}
 .nf-genre-card {
     position: relative;
     height: 160px;
@@ -259,11 +228,11 @@ html, body, .stApp {
     align-items: flex-end;
     padding: 16px;
     color: white;
+    margin-bottom: 4px;
 }
 .nf-genre-card::before {
     content: '';
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0;
     background: linear-gradient(to top, rgba(0,0,0,0.9) 8%, rgba(0,0,0,0.2) 60%, rgba(0,0,0,0.1) 100%);
     z-index: 1;
 }
@@ -271,36 +240,22 @@ html, body, .stApp {
     transform: scale(1.02);
     border-color: var(--nf-red);
 }
-.nf-genre-content {
-    position: relative;
-    z-index: 2;
-    width: 100%;
-}
-.nf-genre-icon {
-    margin-bottom: 8px;
-    display: block;
-}
+.nf-genre-content { position: relative; z-index: 2; width: 100%; }
+.nf-genre-icon { margin-bottom: 8px; display: block; }
 .nf-genre-name {
-    font-size: 19px;
-    font-weight: 800;
-    margin: 0;
-    letter-spacing: -0.2px;
+    font-size: 19px; font-weight: 800;
+    margin: 0; letter-spacing: -0.2px;
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
 .nf-genre-count {
     font-size: 12.5px;
     color: rgba(255,255,255,0.75);
     margin-top: 3px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    display: flex; align-items: center; gap: 6px;
 }
 .nf-genre-count .dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--nf-red);
-    display: inline-block;
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--nf-red); display: inline-block;
 }
 
 /* ================= RESULT CARDS ================= */
@@ -318,81 +273,53 @@ html, body, .stApp {
     box-shadow: 0 12px 32px rgba(0,0,0,0.5);
     border-color: rgba(229,9,20,0.4);
 }
-.nf-result-poster-wrap {
-    position: relative;
-    overflow: hidden;
-}
+.nf-result-poster-wrap { position: relative; overflow: hidden; }
 .nf-result-poster {
-    width: 100%;
-    aspect-ratio: 16 / 10;
-    object-fit: cover;
-    display: block;
+    width: 100%; aspect-ratio: 16 / 10;
+    object-fit: cover; display: block;
     background: #111;
     transition: transform 0.35s ease;
 }
 .nf-result-card:hover .nf-result-poster { transform: scale(1.05); }
 .nf-result-overlay {
-    position: absolute;
-    top: 10px;
-    right: 10px;
+    position: absolute; top: 10px; right: 10px;
     background: rgba(0,0,0,0.75);
     backdrop-filter: blur(6px);
     color: var(--nf-gold);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11.5px;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    gap: 3px;
+    padding: 4px 8px; border-radius: 4px;
+    font-size: 11.5px; font-weight: 800;
+    display: flex; align-items: center; gap: 3px;
 }
-.nf-result-body {
-    padding: 14px 15px 16px;
-    min-height: 118px;
-}
+.nf-result-body { padding: 14px 15px 16px; min-height: 118px; }
 .nf-result-title {
-    font-size: 15px;
-    font-weight: 800;
+    font-size: 15px; font-weight: 800;
     color: var(--nf-white);
-    margin: 0 0 3px 0;
-    line-height: 1.25;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    margin: 0 0 3px 0; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden;
 }
 .nf-result-meta {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 12.5px;
-    font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px; font-weight: 700;
     margin-bottom: 8px;
 }
 .nf-result-year { color: var(--nf-gray-dark); font-weight: 600; }
 .nf-result-match {
     color: var(--nf-red);
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
+    display: inline-flex; align-items: center; gap: 3px;
 }
 .nf-result-overview {
-    font-size: 12.5px;
-    color: var(--nf-gray);
+    font-size: 12.5px; color: var(--nf-gray);
     line-height: 1.5;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden;
 }
 
-/* ================= SHELF (horizontal scroll) ================= */
+/* ================= SHELF ================= */
 .nf-shelf {
-    display: flex;
-    gap: 12px;
+    display: flex; gap: 12px;
     overflow-x: auto;
-    padding-bottom: 12px;
-    margin-bottom: 8px;
+    padding-bottom: 12px; margin-bottom: 8px;
     scrollbar-width: thin;
     scrollbar-color: #333 transparent;
 }
@@ -402,8 +329,7 @@ html, body, .stApp {
 .nf-shelf-card {
     flex: 0 0 155px;
     background: var(--nf-card);
-    border-radius: 8px;
-    overflow: hidden;
+    border-radius: 8px; overflow: hidden;
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     border: 1px solid rgba(255,255,255,0.04);
 }
@@ -413,38 +339,28 @@ html, body, .stApp {
     border-color: rgba(229,9,20,0.5);
 }
 .nf-shelf-poster {
-    width: 100%;
-    aspect-ratio: 2 / 3;
-    object-fit: cover;
-    background: #111;
+    width: 100%; aspect-ratio: 2 / 3;
+    object-fit: cover; background: #111;
     display: block;
 }
 .nf-shelf-info { padding: 10px 11px 12px; }
 .nf-shelf-title {
-    font-size: 12.5px;
-    font-weight: 700;
+    font-size: 12.5px; font-weight: 700;
     color: var(--nf-white);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 4px;
+    white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; margin-bottom: 4px;
 }
 .nf-shelf-meta {
-    font-size: 11.5px;
-    color: var(--nf-gold);
+    font-size: 11.5px; color: var(--nf-gold);
     font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+    display: flex; align-items: center; gap: 4px;
 }
 
-/* ================= MOVIE OF THE DAY ================= */
+/* ================= MOTD ================= */
 .nf-motd {
-    display: flex;
-    gap: 26px;
+    display: flex; gap: 26px;
     background: linear-gradient(135deg, #1f1f1f 0%, #161616 100%);
-    border-radius: 12px;
-    padding: 26px;
+    border-radius: 12px; padding: 26px;
     margin-bottom: 12px;
     border-left: 4px solid var(--nf-red);
     border-top: 1px solid rgba(255,255,255,0.04);
@@ -452,114 +368,71 @@ html, body, .stApp {
     border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 .nf-motd-poster {
-    width: 130px;
-    min-width: 130px;
-    height: 195px;
-    object-fit: cover;
-    border-radius: 8px;
+    width: 130px; min-width: 130px; height: 195px;
+    object-fit: cover; border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
 .nf-motd-label {
     color: var(--nf-red);
-    font-weight: 800;
-    font-size: 11.5px;
-    letter-spacing: 1.4px;
-    text-transform: uppercase;
+    font-weight: 800; font-size: 11.5px;
+    letter-spacing: 1.4px; text-transform: uppercase;
     margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    display: flex; align-items: center; gap: 6px;
 }
 .nf-motd-title {
-    font-size: 28px;
-    font-weight: 900;
+    font-size: 28px; font-weight: 900;
     margin: 0 0 10px 0;
-    letter-spacing: -0.5px;
-    line-height: 1.15;
+    letter-spacing: -0.5px; line-height: 1.15;
 }
 .nf-motd-meta {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--nf-gold);
-    font-weight: 700;
-    font-size: 13px;
-    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 12px;
+    color: var(--nf-gold); font-weight: 700;
+    font-size: 13px; margin-bottom: 12px;
 }
 .nf-motd-overview {
-    color: var(--nf-gray);
-    font-size: 14px;
+    color: var(--nf-gray); font-size: 14px;
     line-height: 1.6;
 }
 
 /* ================= WATCHLIST ================= */
-.nf-watch-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 18px;
-    margin-top: 12px;
-}
 .nf-watch-card {
     position: relative;
     transition: transform 0.22s ease;
+    margin-bottom: 6px;
 }
 .nf-watch-card:hover { transform: translateY(-4px); }
 .nf-watch-poster-wrap {
-    position: relative;
-    border-radius: 8px;
+    position: relative; border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
 .nf-watch-poster {
-    width: 100%;
-    aspect-ratio: 2 / 3;
-    object-fit: cover;
-    display: block;
+    width: 100%; aspect-ratio: 2 / 3;
+    object-fit: cover; display: block;
     background: #111;
 }
 .nf-watch-rating {
-    position: absolute;
-    top: 10px;
-    left: 10px;
+    position: absolute; top: 10px; left: 10px;
     background: rgba(20,20,20,0.92);
     backdrop-filter: blur(6px);
-    border-radius: 5px;
-    padding: 4px 8px;
-    font-size: 12px;
-    font-weight: 800;
+    border-radius: 5px; padding: 4px 8px;
+    font-size: 12px; font-weight: 800;
     color: var(--nf-gold);
-    display: flex;
-    align-items: center;
-    gap: 3px;
+    display: flex; align-items: center; gap: 3px;
 }
 .nf-watch-remove {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
+    position: absolute; top: 10px; right: 10px;
+    width: 26px; height: 26px; border-radius: 50%;
     background: rgba(229,9,20,0.95);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: 900;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background 0.2s ease;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 900; font-size: 14px;
 }
-.nf-watch-remove:hover { background: var(--nf-red-hover); }
 .nf-watch-title {
-    font-size: 13.5px;
-    font-weight: 800;
+    font-size: 13.5px; font-weight: 800;
     color: var(--nf-white);
-    margin: 12px 0 3px 0;
-    line-height: 1.3;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    margin: 12px 0 3px 0; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden;
 }
 .nf-watch-year {
     font-size: 12px;
@@ -568,46 +441,19 @@ html, body, .stApp {
 
 /* ================= EMPTY STATE ================= */
 .nf-empty {
-    padding: 64px 24px;
-    border-radius: 12px;
+    padding: 64px 24px; border-radius: 12px;
     background: linear-gradient(135deg, #1a1a1a 0%, #141414 100%);
     border: 1px solid var(--nf-border);
-    text-align: center;
-    color: var(--nf-gray);
+    text-align: center; color: var(--nf-gray);
 }
 .nf-empty-icon {
     color: var(--nf-gray-dark);
-    opacity: 0.5;
-    margin-bottom: 18px;
+    opacity: 0.5; margin-bottom: 18px;
     display: inline-block;
 }
 .nf-empty-text {
-    font-size: 15px;
-    line-height: 1.6;
-    max-width: 400px;
-    margin: 0 auto;
-}
-
-/* ================= ENGINE BADGE ================= */
-.nf-engine-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    background: rgba(229,9,20,0.12);
-    border: 1px solid rgba(229,9,20,0.4);
-    color: var(--nf-red);
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-    margin-bottom: 18px;
-}
-
-/* ================= SEARCH BAR ================= */
-.nf-search-row {
-    margin-bottom: 16px;
+    font-size: 15px; line-height: 1.6;
+    max-width: 400px; margin: 0 auto;
 }
 
 /* ================= BUTTONS ================= */
@@ -620,13 +466,10 @@ html, body, .stApp {
     font-weight: 700 !important;
     font-size: 13.5px !important;
     letter-spacing: 0.3px !important;
-    transition: background 0.2s ease, transform 0.1s ease !important;
+    transition: background 0.2s ease !important;
     width: 100%;
 }
-.stButton > button:hover {
-    background-color: var(--nf-red-hover) !important;
-    transform: translateY(-1px);
-}
+.stButton > button:hover { background-color: var(--nf-red-hover) !important; }
 
 /* ================= INPUTS ================= */
 .stTextInput > div > div > input {
@@ -641,18 +484,13 @@ html, body, .stApp {
     border-color: var(--nf-red) !important;
     box-shadow: 0 0 0 3px rgba(229,9,20,0.2) !important;
 }
-.stTextInput > div > div > input::placeholder {
-    color: #666 !important;
-}
+.stTextInput > div > div > input::placeholder { color: #666 !important; }
 .stSelectbox > div > div,
 .stMultiSelect > div > div {
     background-color: #1a1a1a !important;
     border: 1px solid #333 !important;
     border-radius: 6px !important;
     color: white !important;
-}
-.stRadio > div {
-    background-color: transparent !important;
 }
 
 /* ================= FOOTER ================= */
@@ -661,12 +499,8 @@ html, body, .stApp {
     padding: 48px 0 12px;
     color: var(--nf-gray-dark);
     font-size: 12px;
-    letter-spacing: 0.3px;
 }
-.nf-footer-accent {
-    color: var(--nf-red);
-    font-weight: 700;
-}
+.nf-footer-accent { color: var(--nf-red); font-weight: 700; }
 
 /* ================= RESPONSIVE ================= */
 @media (max-width: 900px) {
@@ -688,16 +522,14 @@ html, body, .stApp {
     .nf-brand-logo { font-size: 20px; }
     .nf-header-icons { gap: 12px; }
     .nf-nav { gap: 14px; padding: 6px 4px 12px 4px; }
-    .nf-nav-link { font-size: 12.5px; gap: 5px; }
+    .nf-nav .stButton > button { font-size: 12.5px !important; }
     .nf-section { font-size: 18px; margin: 26px 0 12px 0; }
     .nf-motd { flex-direction: column; padding: 20px; }
     .nf-motd-poster { width: 100%; height: auto; max-width: 240px; }
     .nf-motd-title { font-size: 22px; }
-    .nf-genre-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
     .nf-genre-card { height: 130px; }
     .nf-genre-name { font-size: 15px; }
     .nf-shelf-card { flex: 0 0 125px; }
-    .nf-watch-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
 }
 """
 
@@ -732,9 +564,8 @@ ICON_PATHS = {
     "fingerprint": '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
     "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     "camera_alt": '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
-    "brain": '<path d="M12 2a4 4 0 0 0-4 4v1a3 3 0 0 0-3 3v1a3 3 0 0 0 1 2 3 3 0 0 0 1 5v1a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3v-1a3 3 0 0 0 1-5 3 3 0 0 0 1-2v-1a3 3 0 0 0-3-3V6a4 4 0 0 0-4-4z"/>',
-    "chart": '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
     "bell": '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    "home2": '<path d="M3 12l9-9 9 9"/><path d="M9 21V9h6v12"/>',
 }
 
 FILLED_ICONS = {"star", "favorite", "bolt", "auto_awesome", "bell"}
@@ -877,7 +708,7 @@ def placeholder_bg(seed_text: str) -> str:
 
 
 # ============================================================
-# DATA + DUAL ENGINES
+# DATA + EMBEDDINGS ENGINE
 # ============================================================
 DATASET_URL = (
     "https://raw.githubusercontent.com/"
@@ -915,16 +746,14 @@ def _clean(text) -> str:
     return text.lower().strip() if isinstance(text, str) else ""
 
 
-@st.cache_resource(show_spinner="Loading CineMatch engines (TF-IDF + Embeddings)…")
+@st.cache_resource(show_spinner="Loading CineMatch engine…")
 def build_engine():
     """
-    Two engines:
-      - TF-IDF: sparse, keyword-weighted baseline.
-      - Dense embeddings: Latent Semantic Analysis via TruncatedSVD.
-        SVD compresses the TF-IDF matrix into 200 dense dimensions, capturing
-        latent semantic structure (the same idea as Word2Vec/GloVe, but simpler
-        and dependency-free). Cosine similarity on the dense vectors surfaces
-        semantic neighbors even when word overlap is zero.
+    Build a dense-vector embedding engine using LSA (TruncatedSVD).
+    1. Vectorize each movie's text with TF-IDF.
+    2. Compress the sparse matrix to 200 dense dimensions — this captures
+       latent semantic structure (words with similar contexts cluster together).
+    3. Normalize so cosine similarity reduces to a dot product.
     """
     df = load_data().copy()
     df = df.dropna(subset=["title", "overview"])
@@ -942,7 +771,6 @@ def build_engine():
     ]
     df = df[keep].reset_index(drop=True)
 
-    # ---------- TF-IDF (baseline) ----------
     tfidf = TfidfVectorizer(
         stop_words="english",
         max_features=8000,
@@ -950,20 +778,17 @@ def build_engine():
         min_df=2,
     )
     tfidf_matrix = tfidf.fit_transform(df["soup"])
-    tfidf_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
 
-    # ---------- Dense embeddings via LSA (TruncatedSVD) ----------
-    n_components = 200
-    n_components = min(n_components, tfidf_matrix.shape[1] - 1)
+    n_components = min(200, tfidf_matrix.shape[1] - 1)
     svd = TruncatedSVD(n_components=n_components, random_state=42)
     dense = svd.fit_transform(tfidf_matrix)
-    # L2-normalize so cosine == dot product
+
     norms = np.linalg.norm(dense, axis=1, keepdims=True)
     norms[norms == 0] = 1
     dense_norm = dense / norms
-    embed_sim = dense_norm @ dense_norm.T
+    sim = dense_norm @ dense_norm.T
 
-    return df, tfidf_sim, embed_sim
+    return df, sim
 
 
 def recommend(df, sim, title, n=10, genre_filter=None):
@@ -1047,7 +872,7 @@ def is_in_watchlist(movie_id):
 
 
 # ============================================================
-# HEADER + NAV
+# HEADER
 # ============================================================
 render_html(f"""
 <div class="nf-header">
@@ -1062,52 +887,36 @@ render_html(f"""
 </div>
 """)
 
-current_page = st.session_state.page
-wl_count = len(st.session_state.watchlist)
 
+# ============================================================
+# NAV — uses native Streamlit buttons (works reliably)
+# ============================================================
+NAV_ITEMS = [
+    ("home", "Home"),
+    ("browse", "Browse"),
+    ("search", "Search"),
+    ("watchlist", f"My List"),
+]
 
-def nav_link(page_key: str, icon_name: str, label: str) -> str:
-    active = "active" if current_page == page_key else ""
-    return (
-        f'<a class="nf-nav-link {active}" href="?page={page_key}" target="_self">'
-        f'{icon(icon_name, 16, "currentColor")}<span>{label}</span>'
-        f'</a>'
-    )
-
-
-render_html(f"""
-<div class="nf-nav">
-    {nav_link("home", "home", "Home")}
-    {nav_link("browse", "explore", "Browse")}
-    {nav_link("search", "search", "Search")}
-    {nav_link("watchlist", "favorite", f"My List")}
-</div>
-""")
+nav_cols = st.columns([1, 1, 1, 1, 5])
+for i, (page_key, label) in enumerate(NAV_ITEMS):
+    with nav_cols[i]:
+        is_active = st.session_state.page == page_key
+        if st.button(
+            label,
+            key=f"nav_{page_key}",
+            use_container_width=True,
+            type="primary" if is_active else "secondary",
+        ):
+            st.session_state.page = page_key
+            st.session_state.selected_genre = None
+            st.rerun()
 
 
 # ============================================================
-# LOAD BOTH ENGINES
+# LOAD ENGINE
 # ============================================================
-df, tfidf_sim, embed_sim = build_engine()
-
-
-# ============================================================
-# ENGINE TOGGLE (compact radio)
-# ============================================================
-engine_choice = st.radio(
-    "Recommendation engine",
-    ["Dense Embeddings (LSA)", "TF-IDF (baseline)"],
-    index=0 if st.session_state.engine == "embeddings" else 1,
-    horizontal=True,
-    label_visibility="collapsed",
-    key="engine_radio",
-)
-USE_EMBEDDINGS = engine_choice.startswith("Dense")
-st.session_state.engine = "embeddings" if USE_EMBEDDINGS else "tfidf"
-
-sim = embed_sim if USE_EMBEDDINGS else tfidf_sim
-engine_label = "Dense Embeddings (LSA · 200-dim)" if USE_EMBEDDINGS else "TF-IDF (baseline)"
-engine_icon = "brain" if USE_EMBEDDINGS else "chart"
+df, sim = build_engine()
 
 
 # ============================================================
@@ -1189,7 +998,7 @@ def render_result_card(row, show_similarity=True):
 def render_home():
     render_html(f"""
         <div class="nf-hero">
-            <div class="nf-hero-badge">{icon('auto_awesome', 12, 'var(--nf-red)')} AI-POWERED · NLPE</div>
+            <div class="nf-hero-badge">{icon('auto_awesome', 12, 'var(--nf-red)')} AI-POWERED · NLP</div>
             <h1 class="nf-hero-title">Find Your Next Obsession</h1>
             <p class="nf-hero-sub">Discover movies that match your mood. Powered by semantic embeddings — not just keywords.</p>
         </div>
@@ -1237,8 +1046,6 @@ def render_home():
                 for m in trending
             ])
             render_html(f'<div class="nf-shelf">{cards}</div>')
-        else:
-            st.info("Trending unavailable right now.")
 
     render_html(f'<div class="nf-section"><span class="nf-section-accent"></span>{icon("explore", 20, "var(--nf-red)")} Explore by Genre</div>')
     if st.button("BROWSE ALL GENRES →", use_container_width=True, key="home_browse", type="primary"):
@@ -1312,8 +1119,6 @@ def render_browse():
 # PAGE: SEARCH
 # ============================================================
 def render_search():
-    render_html(f'<div class="nf-engine-pill">{icon(engine_icon, 13, "var(--nf-red)")} {engine_label}</div>')
-
     col_input, col_btn = st.columns([9, 1.2])
     with col_input:
         query = st.text_input(
@@ -1351,7 +1156,7 @@ def render_search():
                 st.session_state.history = st.session_state.history[:5]
             st.session_state.last_search = query
 
-            with st.spinner(f"Finding matches with {engine_label}…"):
+            with st.spinner("Finding matches…"):
                 results = recommend(df, sim, query, n=8, genre_filter=st.session_state.genre_filter)
 
             if results.empty:
@@ -1450,7 +1255,7 @@ PAGES.get(st.session_state.page, render_home)()
 render_html(f"""
     <div class="nf-footer">
         <span class="nf-footer-accent">CINEMATCH</span> &nbsp;·&nbsp;
-        Powered by TF-IDF + LSA embeddings &nbsp;·&nbsp;
+        Powered by semantic embeddings &nbsp;·&nbsp;
         Built with {icon('favorite', 11, 'var(--nf-red)')} by Justine Umutoni © 2026
     </div>
 """)
