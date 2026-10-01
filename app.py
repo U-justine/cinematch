@@ -1,7 +1,6 @@
 """
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TDb API integration.
-Dense embeddings via LSA (TruncatedSVD). No user-facing engine toggle.
 """
 
 import ast
@@ -1237,10 +1236,10 @@ def render_home():
     render_html(f"""
         <div class="nf-hero">
             <div class="nf-hero-badge">
-                {icon('auto_awesome', 12, 'var(--nf-red)')} AI-POWERED · NLP
+                {icon('auto_awesome', 12, 'var(--nf-red)')} CURATED FOR YOU
             </div>
             <h1 class="nf-hero-title">Find Your Next Obsession</h1>
-            <p class="nf-hero-sub">Discover movies that match your mood. Powered by semantic embeddings — not just keywords.</p>
+            <p class="nf-hero-sub">Endless films. Perfectly matched to your taste.</p>
         </div>
     """)
 
@@ -1538,7 +1537,7 @@ PAGES.get(st.session_state.page, render_home)()
 render_html(f"""
     <div class="nf-footer">
         <span class="nf-footer-accent">CINEMATCH</span> &nbsp;·&nbsp;
-        Powered by semantic embeddings &nbsp;·&nbsp;
-        Built with {icon('favorite', 11, 'var(--nf-red)')} by Justine Umutoni © 2026
+        Built with {icon('favorite', 11, 'var(--nf-red)')} by Justine Umutoni &nbsp;·&nbsp;
+        © 2026
     </div>
 """)
