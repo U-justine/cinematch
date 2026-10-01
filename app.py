@@ -2,7 +2,11 @@
 CineMatch — Netflix-style movie recommender
 Streamlit Cloud-ready with TMDb API integration.
 Single-page app with top navigation (no sidebar).
-Uses dense embeddings (LSA) by default — no user-facing toggle.
+Uses dense embeddings (LSA via TruncatedSVD) — no user-facing toggle.
+
+Cache note: poster-fetching functions use a versioned parameter (`v`)
+so that bumping the version invalidates any stale "no poster" results
+cached while the TMDb API key was still invalid.
 """
 
 import ast
@@ -14,7 +18,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import TruncatedSVD
 
 
@@ -48,6 +51,7 @@ for key, default in {
 # RENDER HELPER
 # ============================================================
 def render_html(markup: str):
+    """Render HTML reliably by stripping all leading whitespace."""
     st.html(textwrap.dedent(markup).strip())
 
 
@@ -83,7 +87,7 @@ html, body, .stApp {
     max-width: 1400px !important;
 }
 
-/* ================= HEADER ================= */
+/* ============ HEADER ============ */
 .nf-header {
     display: flex;
     align-items: center;
@@ -112,7 +116,7 @@ html, body, .stApp {
     color: white; font-weight: 800; font-size: 14px;
 }
 
-/* ================= NAV ================= */
+/* ============ NAV ============ */
 .nf-nav {
     display: flex;
     align-items: center;
@@ -121,8 +125,6 @@ html, body, .stApp {
     border-bottom: 1px solid rgba(255,255,255,0.06);
     margin-bottom: 28px;
 }
-
-/* Native Streamlit button styled like a Netflix nav link */
 .nf-nav .stButton > button {
     background: transparent !important;
     border: none !important;
@@ -142,11 +144,6 @@ html, body, .stApp {
     color: var(--nf-white) !important;
     background: transparent !important;
 }
-.nf-nav .stButton > button:focus:not(:active) {
-    color: var(--nf-white) !important;
-    background: transparent !important;
-}
-/* Active state via kind=primary */
 .nf-nav .stButton > button[kind="primary"] {
     color: var(--nf-white) !important;
     font-weight: 700 !important;
@@ -154,7 +151,7 @@ html, body, .stApp {
     padding-bottom: 6px !important;
 }
 
-/* ================= HERO ================= */
+/* ============ HERO ============ */
 .nf-hero {
     background: linear-gradient(90deg,
         rgba(20,20,20,0.95) 0%,
@@ -200,7 +197,7 @@ html, body, .stApp {
     margin: 0;
 }
 
-/* ================= SECTIONS ================= */
+/* ============ SECTIONS ============ */
 .nf-section {
     display: flex; align-items: center; gap: 10px;
     font-size: 23px; font-weight: 800;
@@ -214,7 +211,7 @@ html, body, .stApp {
     border-radius: 2px;
 }
 
-/* ================= GENRE CARDS ================= */
+/* ============ GENRE CARDS ============ */
 .nf-genre-card {
     position: relative;
     height: 160px;
@@ -233,7 +230,10 @@ html, body, .stApp {
 .nf-genre-card::before {
     content: '';
     position: absolute; inset: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.9) 8%, rgba(0,0,0,0.2) 60%, rgba(0,0,0,0.1) 100%);
+    background: linear-gradient(to top,
+        rgba(0,0,0,0.9) 8%,
+        rgba(0,0,0,0.2) 60%,
+        rgba(0,0,0,0.1) 100%);
     z-index: 1;
 }
 .nf-genre-card:hover {
@@ -258,7 +258,7 @@ html, body, .stApp {
     background: var(--nf-red); display: inline-block;
 }
 
-/* ================= RESULT CARDS ================= */
+/* ============ RESULT CARDS ============ */
 .nf-result-card {
     position: relative;
     background: var(--nf-card);
@@ -315,7 +315,7 @@ html, body, .stApp {
     -webkit-box-orient: vertical; overflow: hidden;
 }
 
-/* ================= SHELF ================= */
+/* ============ SHELF ============ */
 .nf-shelf {
     display: flex; gap: 12px;
     overflow-x: auto;
@@ -356,7 +356,7 @@ html, body, .stApp {
     display: flex; align-items: center; gap: 4px;
 }
 
-/* ================= MOTD ================= */
+/* ============ MOTD ============ */
 .nf-motd {
     display: flex; gap: 26px;
     background: linear-gradient(135deg, #1f1f1f 0%, #161616 100%);
@@ -394,11 +394,16 @@ html, body, .stApp {
     line-height: 1.6;
 }
 
-/* ================= WATCHLIST ================= */
+/* ============ WATCHLIST ============ */
+.nf-watch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 18px;
+    margin-bottom: 8px;
+}
 .nf-watch-card {
     position: relative;
     transition: transform 0.22s ease;
-    margin-bottom: 6px;
 }
 .nf-watch-card:hover { transform: translateY(-4px); }
 .nf-watch-poster-wrap {
@@ -439,7 +444,7 @@ html, body, .stApp {
     color: var(--nf-gray-dark);
 }
 
-/* ================= EMPTY STATE ================= */
+/* ============ EMPTY STATE ============ */
 .nf-empty {
     padding: 64px 24px; border-radius: 12px;
     background: linear-gradient(135deg, #1a1a1a 0%, #141414 100%);
@@ -456,7 +461,7 @@ html, body, .stApp {
     max-width: 400px; margin: 0 auto;
 }
 
-/* ================= BUTTONS ================= */
+/* ============ BUTTONS ============ */
 .stButton > button {
     background-color: var(--nf-red) !important;
     color: white !important;
@@ -471,7 +476,7 @@ html, body, .stApp {
 }
 .stButton > button:hover { background-color: var(--nf-red-hover) !important; }
 
-/* ================= INPUTS ================= */
+/* ============ INPUTS ============ */
 .stTextInput > div > div > input {
     background-color: #1a1a1a !important;
     border: 1px solid #333 !important;
@@ -493,7 +498,7 @@ html, body, .stApp {
     color: white !important;
 }
 
-/* ================= FOOTER ================= */
+/* ============ FOOTER ============ */
 .nf-footer {
     text-align: center;
     padding: 48px 0 12px;
@@ -502,7 +507,7 @@ html, body, .stApp {
 }
 .nf-footer-accent { color: var(--nf-red); font-weight: 700; }
 
-/* ================= RESPONSIVE ================= */
+/* ============ RESPONSIVE ============ */
 @media (max-width: 900px) {
     .nf-hero { padding: 40px 28px; min-height: 220px; }
     .nf-hero-title { font-size: 38px; letter-spacing: -1px; }
@@ -530,6 +535,7 @@ html, body, .stApp {
     .nf-genre-card { height: 130px; }
     .nf-genre-name { font-size: 15px; }
     .nf-shelf-card { flex: 0 0 125px; }
+    .nf-watch-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
 }
 """
 
@@ -547,9 +553,7 @@ ICON_PATHS = {
     "search": '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/>',
     "favorite": '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
     "movie": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/>',
-    "theaters": '<rect x="2" y="3" width="20" height="18" rx="2"/><line x1="7" y1="3" x2="7" y2="21"/><line x1="17" y1="3" x2="17" y2="21"/><line x1="2" y1="9" x2="7" y2="9"/><line x1="17" y1="9" x2="22" y2="9"/>',
     "star": '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
-    "close": '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     "today": '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
     "auto_awesome": '<path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z"/>',
     "local_fire_department": '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
@@ -565,7 +569,6 @@ ICON_PATHS = {
     "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     "camera_alt": '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     "bell": '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
-    "home2": '<path d="M3 12l9-9 9 9"/><path d="M9 21V9h6v12"/>',
 }
 
 FILLED_ICONS = {"star", "favorite", "bolt", "auto_awesome", "bell"}
@@ -588,8 +591,11 @@ def icon(name: str, size: int = 20, color: str = "currentColor") -> str:
 
 
 # ============================================================
-# TMDb API
+# TMDb API — with cache-busting version parameter
 # ============================================================
+CACHE_VERSION = 3   # bump to invalidate stale poster caches
+
+
 def get_tmdb_key():
     try:
         return st.secrets["TMDB_API_KEY"]
@@ -603,7 +609,7 @@ TMDB_BACKDROP_BASE = "https://image.tmdb.org/t/p/w780"
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_trending_movies(limit: int = 14):
+def fetch_trending_movies(limit: int = 14, v: int = CACHE_VERSION):
     if not TMDB_API_KEY:
         return []
     try:
@@ -629,7 +635,7 @@ def fetch_trending_movies(limit: int = 14):
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_poster_by_id(movie_id):
+def fetch_poster_by_id(movie_id, v: int = CACHE_VERSION):
     if not TMDB_API_KEY or not movie_id:
         return None
     try:
@@ -648,7 +654,7 @@ def fetch_poster_by_id(movie_id):
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_poster_by_title(title: str):
+def fetch_poster_by_title(title: str, v: int = CACHE_VERSION):
     if not TMDB_API_KEY:
         return None
     try:
@@ -676,7 +682,7 @@ GENRE_ID_MAP = {
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def fetch_genre_backdrop(genre_name: str):
+def fetch_genre_backdrop(genre_name: str, v: int = CACHE_VERSION):
     if not TMDB_API_KEY:
         return None
     gid = GENRE_ID_MAP.get(genre_name)
@@ -697,6 +703,14 @@ def fetch_genre_backdrop(genre_name: str):
     return None
 
 
+def get_poster(movie_id=None, title=None) -> str | None:
+    """Try id-based lookup first (more reliable), then title fallback."""
+    p = fetch_poster_by_id(movie_id) if movie_id else None
+    if not p and title:
+        p = fetch_poster_by_title(title)
+    return p
+
+
 def placeholder_bg(seed_text: str) -> str:
     palettes = [
         "#3a0a0a,#120202", "#0a1a3a,#020712", "#1a0a3a,#070212",
@@ -708,7 +722,7 @@ def placeholder_bg(seed_text: str) -> str:
 
 
 # ============================================================
-# DATA + EMBEDDINGS ENGINE
+# DATA + EMBEDDINGS ENGINE (LSA)
 # ============================================================
 DATASET_URL = (
     "https://raw.githubusercontent.com/"
@@ -749,11 +763,10 @@ def _clean(text) -> str:
 @st.cache_resource(show_spinner="Loading CineMatch engine…")
 def build_engine():
     """
-    Build a dense-vector embedding engine using LSA (TruncatedSVD).
-    1. Vectorize each movie's text with TF-IDF.
-    2. Compress the sparse matrix to 200 dense dimensions — this captures
-       latent semantic structure (words with similar contexts cluster together).
-    3. Normalize so cosine similarity reduces to a dot product.
+    Build dense-vector embeddings using LSA (TruncatedSVD).
+      1. TF-IDF vectorize each movie's text.
+      2. Compress sparse matrix → 200 dense dimensions (captures semantics).
+      3. Normalize so cosine similarity == dot product.
     """
     df = load_data().copy()
     df = df.dropna(subset=["title", "overview"])
@@ -889,13 +902,13 @@ render_html(f"""
 
 
 # ============================================================
-# NAV — uses native Streamlit buttons (works reliably)
+# NAV — native Streamlit buttons styled as Netflix nav
 # ============================================================
 NAV_ITEMS = [
     ("home", "Home"),
     ("browse", "Browse"),
     ("search", "Search"),
-    ("watchlist", f"My List"),
+    ("watchlist", "My List"),
 ]
 
 nav_cols = st.columns([1, 1, 1, 1, 5])
@@ -927,7 +940,8 @@ def render_shelf_card(title, poster, rating, year=None):
         f'<img class="nf-shelf-poster" src="{poster}" alt="{title}">'
         if poster else
         f'<div class="nf-shelf-poster" style="background:{placeholder_bg(title)};'
-        f'display:flex;align-items:center;justify-content:center;">{icon("movie", 30, "rgba(255,255,255,0.4)")}</div>'
+        f'display:flex;align-items:center;justify-content:center;">'
+        f'{icon("movie", 30, "rgba(255,255,255,0.4)")}</div>'
     )
     year_txt = f" · {year}" if year else ""
     return f"""
@@ -948,15 +962,14 @@ def render_result_card(row, show_similarity=True):
     year = str(row.get("release_date") or "")[:4]
     overview = str(row.get("overview", ""))[:140]
 
-    poster = None
-    if TMDB_API_KEY:
-        poster = fetch_poster_by_id(movie_id) or fetch_poster_by_title(row["title"])
+    poster = get_poster(movie_id=movie_id, title=row["title"])
 
     poster_html = (
         f'<img class="nf-result-poster" src="{poster}" alt="{row["title"]}">'
         if poster else
         f'<div class="nf-result-poster" style="background:{placeholder_bg(row["title"])};'
-        f'display:flex;align-items:center;justify-content:center;">{icon("movie", 34, "rgba(255,255,255,0.4)")}</div>'
+        f'display:flex;align-items:center;justify-content:center;">'
+        f'{icon("movie", 34, "rgba(255,255,255,0.4)")}</div>'
     )
 
     match_html = ""
@@ -988,7 +1001,10 @@ def render_result_card(row, show_similarity=True):
             if in_wl:
                 remove_from_watchlist(movie_id)
             else:
-                add_to_watchlist(movie_id, row["title"], poster, f"{rating:.1f}", year, row.get("genres_list"))
+                add_to_watchlist(
+                    movie_id, row["title"], poster,
+                    f"{rating:.1f}", year, row.get("genres_list"),
+                )
             st.rerun()
 
 
@@ -998,27 +1014,31 @@ def render_result_card(row, show_similarity=True):
 def render_home():
     render_html(f"""
         <div class="nf-hero">
-            <div class="nf-hero-badge">{icon('auto_awesome', 12, 'var(--nf-red)')} AI-POWERED · NLP</div>
+            <div class="nf-hero-badge">
+                {icon('auto_awesome', 12, 'var(--nf-red)')} AI-POWERED · NLP
+            </div>
             <h1 class="nf-hero-title">Find Your Next Obsession</h1>
             <p class="nf-hero-sub">Discover movies that match your mood. Powered by semantic embeddings — not just keywords.</p>
         </div>
     """)
 
-    render_html(f'<div class="nf-section"><span class="nf-section-accent"></span>{icon("today", 20, "var(--nf-red)")} Movie of the Day</div>')
+    render_html(
+        f'<div class="nf-section"><span class="nf-section-accent"></span>'
+        f'{icon("today", 20, "var(--nf-red)")} Movie of the Day</div>'
+    )
 
     seed = int(datetime.date.today().strftime("%Y%m%d"))
     random.seed(seed)
     top = df[df["vote_average"] >= 7.5] if "vote_average" in df.columns else df
     if not top.empty:
         motd = top.sample(1).iloc[0]
-        poster = None
-        if TMDB_API_KEY:
-            poster = fetch_poster_by_id(motd.get("id")) or fetch_poster_by_title(motd["title"])
+        poster = get_poster(movie_id=motd.get("id"), title=motd["title"])
         poster_html = (
             f'<img class="nf-motd-poster" src="{poster}" alt="poster">'
             if poster else
             f'<div class="nf-motd-poster" style="background:{placeholder_bg(motd["title"])};'
-            f'display:flex;align-items:center;justify-content:center;">{icon("movie", 32, "rgba(255,255,255,0.4)")}</div>'
+            f'display:flex;align-items:center;justify-content:center;">'
+            f'{icon("movie", 32, "rgba(255,255,255,0.4)")}</div>'
         )
         rating = motd.get("vote_average", 0)
         year = str(motd.get("release_date") or "")[:4]
@@ -1026,7 +1046,9 @@ def render_home():
             <div class="nf-motd">
                 {poster_html}
                 <div style="flex:1;min-width:0;">
-                    <div class="nf-motd-label">{icon('auto_awesome', 12, 'var(--nf-red)')} PICKED FOR TODAY</div>
+                    <div class="nf-motd-label">
+                        {icon('auto_awesome', 12, 'var(--nf-red)')} PICKED FOR TODAY
+                    </div>
                     <div class="nf-motd-title">{motd['title']}</div>
                     <div class="nf-motd-meta">
                         {icon('star', 14, 'var(--nf-gold)')} {rating:.1f}
@@ -1038,7 +1060,10 @@ def render_home():
         """)
 
     if TMDB_API_KEY:
-        render_html(f'<div class="nf-section"><span class="nf-section-accent"></span>{icon("local_fire_department", 20, "var(--nf-red)")} Trending This Week</div>')
+        render_html(
+            f'<div class="nf-section"><span class="nf-section-accent"></span>'
+            f'{icon("local_fire_department", 20, "var(--nf-red)")} Trending This Week</div>'
+        )
         trending = fetch_trending_movies(14)
         if trending:
             cards = "".join([
@@ -1047,7 +1072,10 @@ def render_home():
             ])
             render_html(f'<div class="nf-shelf">{cards}</div>')
 
-    render_html(f'<div class="nf-section"><span class="nf-section-accent"></span>{icon("explore", 20, "var(--nf-red)")} Explore by Genre</div>')
+    render_html(
+        f'<div class="nf-section"><span class="nf-section-accent"></span>'
+        f'{icon("explore", 20, "var(--nf-red)")} Explore by Genre</div>'
+    )
     if st.button("BROWSE ALL GENRES →", use_container_width=True, key="home_browse", type="primary"):
         st.session_state.page = "browse"
         st.rerun()
@@ -1064,7 +1092,10 @@ def render_browse():
             st.rerun()
 
         label = GENRE_LABELS.get(genre, genre)
-        render_html(f'<div class="nf-section"><span class="nf-section-accent"></span>{icon(GENRE_ICONS.get(genre, "movie"), 20, "var(--nf-red)")} {label}</div>')
+        render_html(
+            f'<div class="nf-section"><span class="nf-section-accent"></span>'
+            f'{icon(GENRE_ICONS.get(genre, "movie"), 20, "var(--nf-red)")} {label}</div>'
+        )
 
         movies = get_genre_movies(df, genre, n=20)
         if movies.empty:
@@ -1130,8 +1161,10 @@ def render_search():
 
     if st.session_state.history:
         hist = "  ·  ".join(st.session_state.history)
-        render_html(f'<div style="color:#888;font-size:12.5px;margin:-6px 0 18px 2px;">'
-                    f'{icon("history", 14, "#888")} Recent: {hist}</div>')
+        render_html(
+            f'<div style="color:#888;font-size:12.5px;margin:-6px 0 18px 2px;">'
+            f'{icon("history", 14, "#888")} Recent: {hist}</div>'
+        )
 
     with st.expander("Filter by genre (optional)"):
         selected_genres = st.multiselect(
@@ -1143,8 +1176,10 @@ def render_search():
     if query and len(query) > 1:
         suggestions = search_titles(df, query)
         if suggestions:
-            render_html(f'<div style="color:#888;font-size:12.5px;margin:2px 0 18px 2px;">'
-                        f'{icon("lightbulb", 14, "#888")} Suggestions: {"  ·  ".join(suggestions)}</div>')
+            render_html(
+                f'<div style="color:#888;font-size:12.5px;margin:2px 0 18px 2px;">'
+                f'{icon("lightbulb", 14, "#888")} Suggestions: {"  ·  ".join(suggestions)}</div>'
+            )
 
     if go:
         if not query:
@@ -1186,8 +1221,10 @@ def render_watchlist():
     """)
 
     n = len(st.session_state.watchlist)
-    render_html(f'<div style="color:var(--nf-gray);font-size:14px;margin-bottom:20px;">'
-                f'{n} title{"s" if n != 1 else ""} · sorted by added date</div>')
+    render_html(
+        f'<div style="color:var(--nf-gray);font-size:14px;margin-bottom:20px;">'
+        f'{n} title{"s" if n != 1 else ""} · sorted by added date</div>'
+    )
 
     if not st.session_state.watchlist:
         render_html(f"""
@@ -1203,12 +1240,13 @@ def render_watchlist():
 
     cards = []
     for m in st.session_state.watchlist:
-        poster = m.get("poster")
+        poster = m.get("poster") or get_poster(movie_id=m["id"], title=m["title"])
         poster_html = (
             f'<img class="nf-watch-poster" src="{poster}" alt="{m["title"]}">'
             if poster else
             f'<div class="nf-watch-poster" style="background:{placeholder_bg(m["title"])};'
-            f'display:flex;align-items:center;justify-content:center;">{icon("movie", 28, "rgba(255,255,255,0.4)")}</div>'
+            f'display:flex;align-items:center;justify-content:center;">'
+            f'{icon("movie", 28, "rgba(255,255,255,0.4)")}</div>'
         )
         year = m.get("year") or ""
         genres_txt = ", ".join((m.get("genres") or [])[:2])
